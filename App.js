@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -178,6 +179,12 @@ function AuthScreen({ onAuthenticated }) {
         pendingToken,
       );
 
+      if (result.requires_2fa) {
+        setVerificationStep("2fa");
+        setDemoCode(result.demo_code || "");
+        setOtp("");
+        return;
+      }
       await AsyncStorage.multiSet([
         ["momoguard_token", pendingToken],
         ["momoguard_user", JSON.stringify(pendingUser)],
@@ -336,7 +343,14 @@ function AuthScreen({ onAuthenticated }) {
   );
 }
 
-function Home({ user, navigate }) {
+function Home({ user, token, navigate }) {
+  const [dashboard, setDashboard] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api("/dashboard", {}, token)
+      .then(setDashboard)
+      .catch((requestError) => setError(requestError.message));
+  }, [token]);
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.eyebrow}>TUESDAY, 9 SEPTEMBER</Text>
@@ -344,6 +358,7 @@ function Home({ user, navigate }) {
         Good morning, {(user.full_name || "Jefferson").split(" ")[0]}
       </Text>
       <Text style={styles.muted}>Your money is being watched over.</Text>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.status}>
         <View style={styles.statusDot} />
         <View>
@@ -355,18 +370,32 @@ function Home({ user, navigate }) {
         <View style={styles.rowBetween}>
           <View>
             <Text style={styles.mutedSmall}>Available balance</Text>
-            <Text style={styles.balanceValue}>GHS 4,250.00</Text>
+            <Text style={styles.balanceValue}>
+              {dashboard
+                ? `${dashboard.currency} ${Number(dashboard.balance).toFixed(2)}`
+                : "Loading..."}
+            </Text>
           </View>
           <Text style={styles.live}>LIVE</Text>
         </View>
         <View style={styles.moneyRow}>
           <View>
             <Text style={styles.mutedSmall}>Income</Text>
-            <Text style={styles.income}>+ GHS 5,400</Text>
+            <Text style={styles.income}>
+              +{" "}
+              {dashboard
+                ? `${dashboard.currency} ${Number(dashboard.income).toFixed(2)}`
+                : "Loading..."}
+            </Text>
           </View>
           <View>
             <Text style={styles.mutedSmall}>Spending</Text>
-            <Text style={styles.warning}>- GHS 1,150</Text>
+            <Text style={styles.warning}>
+              -{" "}
+              {dashboard
+                ? `${dashboard.currency} ${Number(dashboard.spending).toFixed(2)}`
+                : "Loading..."}
+            </Text>
           </View>
         </View>
       </View>
@@ -377,10 +406,14 @@ function Home({ user, navigate }) {
       />
       <View style={styles.riskCard}>
         <View style={styles.gauge}>
-          <Text style={styles.gaugeText}>92</Text>
+          <Text style={styles.gaugeText}>
+            {dashboard?.security_score ?? "--"}
+          </Text>
         </View>
         <View>
-          <Text style={styles.eyebrow}>LOW RISK</Text>
+          <Text style={styles.eyebrow}>
+            {dashboard ? "SECURITY STATUS" : "CHECKING"}
+          </Text>
           <Text style={styles.cardTitle}>Recent activity looks normal</Text>
           <Text style={styles.mutedSmall}>
             MoMoGuard AI checked 18 signals today.
@@ -723,7 +756,7 @@ function Detail({ transaction, alert, token, navigate }) {
         <Button onPress={() => navigate("analysis", transaction)}>
           Run AI analysis
         </Button>
-        <Button secondary onPress={() => navigate("alerts")}>
+        <Button secondary onPress={() => navigate("report", transaction)}>
           Report fraud
         </Button>
       </ScrollView>
@@ -769,6 +802,100 @@ function Empty({ message }) {
   );
 }
 
+function ReportForm({ token, transaction, navigate }) {
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("UNAUTHORIZED_TRANSACTION");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await api(
+        "/reports",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            category,
+            description,
+            transaction_id: transaction?.id,
+          }),
+        },
+        token,
+      );
+      setMessage("Report submitted for review.");
+      setDescription("");
+    } catch (requestError) {
+      setMessage(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <Back
+        onPress={() =>
+          navigate(transaction ? "transaction" : "home", transaction)
+        }
+        title={transaction ? "Transaction" : "Home"}
+      />
+      <Text style={styles.title}>Report suspicious activity</Text>
+      <View style={styles.panel}>
+        <Field label="Category" value={category} onChangeText={setCategory} />
+        <Field
+          label="What happened?"
+          value={description}
+          onChangeText={setDescription}
+        />
+        {message ? <Text style={styles.safe}>{message}</Text> : null}
+        <Button onPress={submit} disabled={busy || !description.trim()}>
+          {busy ? "Submitting..." : "Submit report"}
+        </Button>
+      </View>
+    </ScrollView>
+  );
+}
+
+function NotificationSettings({ token }) {
+  const [settings, setSettings] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api("/settings", {}, token)
+      .then(setSettings)
+      .catch((requestError) => setError(requestError.message));
+  }, [token]);
+  async function toggle(key, value) {
+    try {
+      setSettings(
+        await api(
+          "/settings",
+          { method: "PUT", body: JSON.stringify({ [key]: value }) },
+          token,
+        ),
+      );
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
+  return (
+    <View>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {[
+        ["security_alerts", "Security alerts"],
+        ["transaction_updates", "Transaction updates"],
+        ["product_updates", "Product updates"],
+      ].map(([key, label]) => (
+        <SecurityToggle
+          key={key}
+          label={label}
+          value={settings?.[key]}
+          onChange={(value) => toggle(key, value)}
+        />
+      ))}
+    </View>
+  );
+}
+
 function ProfilePage({ screen, user, token, navigate }) {
   if (screen === "profile-devices")
     return <Devices token={token} navigate={navigate} />;
@@ -791,19 +918,7 @@ function ProfilePage({ screen, user, token, navigate }) {
             <SecurityRow label="Email" value={user.email} />
           </>
         ) : screen === "profile-notifications" ? (
-          <>
-            <SecurityToggle label="Security alerts" value onChange={() => {}} />
-            <SecurityToggle
-              label="Transaction updates"
-              value
-              onChange={() => {}}
-            />
-            <SecurityToggle
-              label="Product updates"
-              value={false}
-              onChange={() => {}}
-            />
-          </>
+          <NotificationSettings token={token} />
         ) : screen === "profile-appearance" ? (
           <>
             <Text style={styles.muted}>
@@ -838,7 +953,10 @@ function ProfilePage({ screen, user, token, navigate }) {
               Pause the transaction, do not share your PIN, and report the
               activity for review.
             </Text>
-            <Button secondary onPress={() => {}}>
+            <Button
+              secondary
+              onPress={() => Linking.openURL("mailto:support@momoguard.local")}
+            >
               Contact support
             </Button>
           </>
@@ -897,7 +1015,7 @@ export default function App() {
     );
   const content =
     screen === "home" ? (
-      <Home user={user} navigate={navigate} />
+      <Home user={user} token={token} navigate={navigate} />
     ) : screen === "transactions" ? (
       <Transactions token={token} navigate={navigate} />
     ) : screen === "security" ? (
@@ -910,6 +1028,8 @@ export default function App() {
       <Detail transaction={selected} token={token} navigate={navigate} />
     ) : screen === "alert" ? (
       <Detail alert={selected} token={token} navigate={navigate} />
+    ) : screen === "report" ? (
+      <ReportForm token={token} transaction={selected} navigate={navigate} />
     ) : screen.startsWith("profile-") ? (
       <ProfilePage
         screen={screen}
@@ -957,13 +1077,25 @@ export default function App() {
 
 function Devices({ token, navigate }) {
   const [items, setItems] = useState([]);
+  const [error, setError] = useState("");
   useEffect(() => {
-    api("/devices", {}, token).then((result) => setItems(result.items));
+    api("/devices", {}, token)
+      .then((result) => setItems(result.items))
+      .catch((requestError) => setError(requestError.message));
   }, [token]);
+  async function remove(device) {
+    try {
+      await api(`/devices/${device.id}`, { method: "DELETE" }, token);
+      setItems((current) => current.filter((item) => item.id !== device.id));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Back onPress={() => navigate("security")} title="Security" />
       <Text style={styles.title}>Trusted devices</Text>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       {items.map((device) => (
         <View key={device.id} style={styles.panel}>
           <View style={styles.rowBetween}>
@@ -977,6 +1109,11 @@ function Devices({ token, navigate }) {
               {device.trusted ? "Trusted" : "Review"}
             </Text>
           </View>
+          {!device.trusted ? (
+            <Button secondary onPress={() => remove(device)}>
+              Remove device
+            </Button>
+          ) : null}
         </View>
       ))}
     </ScrollView>
