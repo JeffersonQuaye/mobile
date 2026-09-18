@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -46,10 +46,13 @@ function Button({ children, onPress, secondary = false, disabled = false }) {
     <Pressable
       disabled={disabled}
       onPress={onPress}
-      style={[
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => [
         styles.button,
         secondary && styles.buttonSecondary,
         disabled && styles.disabled,
+        pressed && !disabled && styles.buttonPressed,
       ]}
     >
       <Text
@@ -61,7 +64,23 @@ function Button({ children, onPress, secondary = false, disabled = false }) {
   );
 }
 
-function Field({ label, value, onChangeText, secureTextEntry, keyboardType }) {
+function Field({
+  label,
+  value,
+  onChangeText,
+  secureTextEntry,
+  keyboardType,
+  inputMode,
+  maxLength,
+}) {
+  const resolvedInputMode =
+    inputMode ??
+    (keyboardType === "email-address"
+      ? "email"
+      : keyboardType === "phone-pad"
+        ? "tel"
+        : "text");
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -70,6 +89,11 @@ function Field({ label, value, onChangeText, secureTextEntry, keyboardType }) {
         onChangeText={onChangeText}
         secureTextEntry={secureTextEntry}
         keyboardType={keyboardType}
+        inputMode={resolvedInputMode}
+        maxLength={maxLength}
+        autoCapitalize={secureTextEntry ? "none" : "words"}
+        autoCorrect={false}
+        accessibilityLabel={label}
         placeholderTextColor={COLORS.muted}
         style={styles.input}
       />
@@ -79,13 +103,19 @@ function Field({ label, value, onChangeText, secureTextEntry, keyboardType }) {
 
 function AuthScreen({ onAuthenticated }) {
   const [registering, setRegistering] = useState(false);
+  const [verificationStep, setVerificationStep] = useState(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("jefferson@example.com");
   const [password, setPassword] = useState("DemoPass123!");
   const [confirm, setConfirm] = useState("");
+  const [otp, setOtp] = useState("");
+  const [pendingToken, setPendingToken] = useState("");
+  const [pendingUser, setPendingUser] = useState(null);
+  const [demoCode, setDemoCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
   async function submit() {
     setError("");
     if (registering && password !== confirm) {
@@ -102,6 +132,16 @@ function AuthScreen({ onAuthenticated }) {
             : { email, password },
         ),
       });
+
+      if (result.requires_phone_verification || result.requires_2fa) {
+        setPendingToken(result.token);
+        setPendingUser(result.user);
+        setVerificationStep(result.requires_phone_verification ? "phone" : "2fa");
+        setDemoCode(result.demo_code || "");
+        setOtp("");
+        return;
+      }
+
       await AsyncStorage.multiSet([
         ["momoguard_token", result.token],
         ["momoguard_user", JSON.stringify(result.user)],
@@ -117,6 +157,91 @@ function AuthScreen({ onAuthenticated }) {
       setBusy(false);
     }
   }
+
+  async function handleVerification() {
+    if (!pendingToken || !verificationStep) return;
+    setError("");
+    setBusy(true);
+    try {
+      const endpoint =
+        verificationStep === "phone" ? "/auth/verify-phone" : "/auth/verify-2fa";
+      const result = await api(
+        endpoint,
+        {
+          method: "POST",
+          body: JSON.stringify({ code: otp }),
+        },
+        pendingToken,
+      );
+
+      await AsyncStorage.multiSet([
+        ["momoguard_token", pendingToken],
+        ["momoguard_user", JSON.stringify(pendingUser)],
+      ]);
+      onAuthenticated(pendingUser, pendingToken);
+      setVerificationStep(null);
+      setOtp("");
+      setDemoCode("");
+      setPendingToken("");
+      setPendingUser(null);
+      setError(result.message || "Verification complete.");
+    } catch (requestError) {
+      setError(
+        requestError.message === "Network request failed"
+          ? "Cannot reach the Flask API. Start the backend and check the API address."
+          : requestError.message,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (verificationStep) {
+    return (
+      <SafeAreaView style={styles.authScreen}>
+        <View style={styles.authCard}>
+          <View style={styles.brand}>
+            <Text style={styles.brandMark}>*</Text>
+            <Text style={styles.brandText}>MoMoGuard</Text>
+          </View>
+          <Text style={styles.eyebrow}>VERIFY ACCOUNT</Text>
+          <Text style={styles.title}>
+            {verificationStep === "phone" ? "Verify phone number" : "Two-factor verification"}
+          </Text>
+          <Text style={styles.muted}>
+            {verificationStep === "phone"
+              ? "Enter the 6-digit code sent to your phone number."
+              : "Enter the 6-digit code sent to your authenticator or SMS channel."}
+          </Text>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {demoCode ? <Text style={styles.demoCode}>Demo code: {demoCode}</Text> : null}
+          <Field
+            label="Verification code"
+            value={otp}
+            onChangeText={setOtp}
+            keyboardType="number-pad"
+            inputMode="numeric"
+            maxLength={6}
+          />
+          <Button onPress={handleVerification} disabled={busy || otp.length !== 6}>
+            {busy ? "Verifying..." : "Confirm code"}
+          </Button>
+          <Pressable
+            onPress={() => {
+              setVerificationStep(null);
+              setOtp("");
+              setError("");
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.switchText}>Back to sign in</Text>
+          </Pressable>
+        </View>
+        <StatusBar style="light" />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.authScreen}>
       <View style={styles.authCard}>
@@ -144,6 +269,7 @@ function AuthScreen({ onAuthenticated }) {
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
+              inputMode="tel"
             />
           </>
         ) : null}
@@ -152,6 +278,7 @@ function AuthScreen({ onAuthenticated }) {
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
+          inputMode="email"
         />
         <Field
           label="Password"
@@ -181,6 +308,10 @@ function AuthScreen({ onAuthenticated }) {
             setRegistering(!registering);
             setError("");
           }}
+          accessibilityRole="button"
+          accessibilityLabel={
+            registering ? "Switch to sign in form" : "Switch to register form"
+          }
         >
           <Text style={styles.switchText}>
             {registering
@@ -319,6 +450,8 @@ function Transactions({ token, navigate }) {
           <Pressable
             key={option}
             onPress={() => setFilter(option)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: filter === option }}
             style={[styles.filter, filter === option && styles.filterActive]}
           >
             <Text style={filter === option ? styles.link : styles.muted}>
@@ -477,6 +610,8 @@ function Alerts({ token, navigate }) {
           <Pressable
             key={option}
             onPress={() => setFilter(option)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: filter === option }}
             style={[styles.filter, filter === option && styles.filterActive]}
           >
             <Text style={filter === option ? styles.link : styles.muted}>
@@ -777,33 +912,35 @@ export default function App() {
       <Assistant token={token} navigate={navigate} />
     );
   return (
-    <SafeAreaView style={styles.app}>
-      <View style={styles.header}>
-        <Text style={styles.brandText}>MoMoGuard</Text>
-        <Text style={styles.headerIcon}>*</Text>
-      </View>
-      <View style={styles.flex}>{content}</View>
-      <View style={styles.nav}>
-        {[
-          ["home", "Home"],
-          ["transactions", "Activity"],
-          ["security", "Security"],
-          ["alerts", "Alerts"],
-          ["profile", "Profile"],
-        ].map(([id, label]) => (
-          <Pressable
-            key={id}
-            onPress={() => navigate(id)}
-            style={styles.navItem}
-          >
-            <Text style={screen === id ? styles.link : styles.muted}>
-              {label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <StatusBar style="light" />
-    </SafeAreaView>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.app} edges={['top','bottom']}>
+        <View style={styles.header}>
+          <Text style={styles.brandText}>MoMoGuard</Text>
+          <Text style={styles.headerIcon}>*</Text>
+        </View>
+        <View style={styles.flex}>{content}</View>
+        <View style={styles.nav}>
+          {[
+            ["home", "Home"],
+            ["transactions", "Activity"],
+            ["security", "Security"],
+            ["alerts", "Alerts"],
+            ["profile", "Profile"],
+          ].map(([id, label]) => (
+            <Pressable
+              key={id}
+              onPress={() => navigate(id)}
+              style={styles.navItem}
+            >
+              <Text style={screen === id ? styles.link : styles.muted}>
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <StatusBar style="light" />
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
@@ -1001,6 +1138,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 16,
   },
+  buttonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
+  },
   buttonSecondary: {
     backgroundColor: COLORS.panel2,
     borderWidth: 1,
@@ -1013,6 +1154,14 @@ const styles = StyleSheet.create({
     color: COLORS.cyan,
     textAlign: "center",
     marginTop: 18,
+    fontWeight: "700",
+  },
+  demoCode: {
+    color: COLORS.amber,
+    backgroundColor: "rgba(239,189,104,0.12)",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
     fontWeight: "700",
   },
   header: {
@@ -1176,22 +1325,6 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
   },
   menuIcon: { color: COLORS.cyan, fontSize: 20 },
-  menu: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.line,
-    paddingVertical: 17,
-  },
-  menu: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.line,
-    paddingVertical: 17,
-  },
   prompt: {
     paddingVertical: 12,
     borderTopWidth: 1,
