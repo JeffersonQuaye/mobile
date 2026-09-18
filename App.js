@@ -136,7 +136,9 @@ function AuthScreen({ onAuthenticated }) {
       if (result.requires_phone_verification || result.requires_2fa) {
         setPendingToken(result.token);
         setPendingUser(result.user);
-        setVerificationStep(result.requires_phone_verification ? "phone" : "2fa");
+        setVerificationStep(
+          result.requires_phone_verification ? "phone" : "2fa",
+        );
         setDemoCode(result.demo_code || "");
         setOtp("");
         return;
@@ -164,7 +166,9 @@ function AuthScreen({ onAuthenticated }) {
     setBusy(true);
     try {
       const endpoint =
-        verificationStep === "phone" ? "/auth/verify-phone" : "/auth/verify-2fa";
+        verificationStep === "phone"
+          ? "/auth/verify-phone"
+          : "/auth/verify-2fa";
       const result = await api(
         endpoint,
         {
@@ -206,7 +210,9 @@ function AuthScreen({ onAuthenticated }) {
           </View>
           <Text style={styles.eyebrow}>VERIFY ACCOUNT</Text>
           <Text style={styles.title}>
-            {verificationStep === "phone" ? "Verify phone number" : "Two-factor verification"}
+            {verificationStep === "phone"
+              ? "Verify phone number"
+              : "Two-factor verification"}
           </Text>
           <Text style={styles.muted}>
             {verificationStep === "phone"
@@ -214,7 +220,9 @@ function AuthScreen({ onAuthenticated }) {
               : "Enter the 6-digit code sent to your authenticator or SMS channel."}
           </Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          {demoCode ? <Text style={styles.demoCode}>Demo code: {demoCode}</Text> : null}
+          {demoCode ? (
+            <Text style={styles.demoCode}>Demo code: {demoCode}</Text>
+          ) : null}
           <Field
             label="Verification code"
             value={otp}
@@ -223,7 +231,10 @@ function AuthScreen({ onAuthenticated }) {
             inputMode="numeric"
             maxLength={6}
           />
-          <Button onPress={handleVerification} disabled={busy || otp.length !== 6}>
+          <Button
+            onPress={handleVerification}
+            disabled={busy || otp.length !== 6}
+          >
             {busy ? "Verifying..." : "Confirm code"}
           </Button>
           <Pressable
@@ -913,7 +924,7 @@ export default function App() {
     );
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.app} edges={['top','bottom']}>
+      <SafeAreaView style={styles.app} edges={["top", "bottom"]}>
         <View style={styles.header}>
           <Text style={styles.brandText}>MoMoGuard</Text>
           <Text style={styles.headerIcon}>*</Text>
