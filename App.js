@@ -15,6 +15,7 @@ import {
 } from "react-native";
 
 const API_BASE = "http://10.0.2.2:5000/api";
+// Keep visual tokens in one place so every screen uses the same security-focused palette.
 const COLORS = {
   bg: "#07131f",
   panel: "#0d1f2b",
@@ -29,6 +30,7 @@ const COLORS = {
 };
 
 async function api(path, options = {}, token) {
+  // Centralize JSON and bearer-token handling for every mobile API request.
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -118,6 +120,7 @@ function AuthScreen({ onAuthenticated }) {
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    // Login and registration both enter the same phone-then-2FA verification flow.
     setError("");
     if (registering && password !== confirm) {
       setError("Passwords do not match.");
@@ -179,6 +182,7 @@ function AuthScreen({ onAuthenticated }) {
         pendingToken,
       );
 
+      // Phone verification can return the next challenge instead of completing login.
       if (result.requires_2fa) {
         setVerificationStep("2fa");
         setDemoCode(result.demo_code || "");
@@ -346,6 +350,7 @@ function AuthScreen({ onAuthenticated }) {
 function Home({ user, token, navigate }) {
   const [dashboard, setDashboard] = useState(null);
   const [error, setError] = useState("");
+  // Dashboard figures are loaded from the authenticated API rather than hard-coded.
   useEffect(() => {
     api("/dashboard", {}, token)
       .then(setDashboard)
@@ -473,6 +478,7 @@ function Transactions({ token, navigate }) {
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState("all");
   const [error, setError] = useState("");
+  // Fetch once per authenticated session, then apply filters locally for responsiveness.
   useEffect(() => {
     api("/transactions", {}, token)
       .then((result) => setItems(result.items))
@@ -553,6 +559,7 @@ function Security({ token, navigate }) {
       .catch((requestError) => setError(requestError.message));
   }, [token]);
   async function toggle(key, value) {
+    // Persist each switch immediately and replace local state with the server response.
     try {
       setState(
         await api(
@@ -808,6 +815,7 @@ function ReportForm({ token, transaction, navigate }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit() {
+    // Reports are sent to the API so the review team can process them later.
     setBusy(true);
     setMessage("");
     try {
@@ -865,6 +873,7 @@ function NotificationSettings({ token }) {
       .catch((requestError) => setError(requestError.message));
   }, [token]);
   async function toggle(key, value) {
+    // Notification preferences are account settings, not device-only UI state.
     try {
       setSettings(
         await api(
@@ -984,6 +993,7 @@ export default function App() {
   const [token, setToken] = useState(null);
   const [screen, setScreen] = useState("home");
   const [selected, setSelected] = useState(null);
+  // Restore the last authenticated session before rendering the main navigation.
   useEffect(() => {
     AsyncStorage.multiGet(["momoguard_token", "momoguard_user"]).then(
       ([tokenEntry, userEntry]) => {
@@ -1084,6 +1094,7 @@ function Devices({ token, navigate }) {
       .catch((requestError) => setError(requestError.message));
   }, [token]);
   async function remove(device) {
+    // Only untrusted devices can be removed; the API enforces ownership and policy.
     try {
       await api(`/devices/${device.id}`, { method: "DELETE" }, token);
       setItems((current) => current.filter((item) => item.id !== device.id));
@@ -1121,6 +1132,7 @@ function Devices({ token, navigate }) {
 }
 function Analysis({ token, transaction, navigate }) {
   const [result, setResult] = useState(null);
+  // Send the transaction signals to the backend fraud analysis endpoint.
   useEffect(() => {
     api("/fraud/predict", {
       method: "POST",
@@ -1172,6 +1184,7 @@ function Analysis({ token, transaction, navigate }) {
 function Assistant({ token, navigate }) {
   const [response, setResponse] = useState("");
   async function ask(message) {
+    // Assistant requests are authenticated so future responses can use account context safely.
     const result = await api(
       "/ai/chat",
       { method: "POST", body: JSON.stringify({ message }) },
