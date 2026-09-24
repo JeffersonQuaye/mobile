@@ -1,10 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,7 +18,45 @@ import {
   View,
 } from "react-native";
 
-const API_BASE = "http://10.0.2.2:5000/api";
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  (Platform.OS === "web"
+    ? "http://localhost:5000/api"
+    : "http://10.0.2.2:5000/api");
+
+async function saveSession(token, user) {
+  if (Platform.OS === "web") {
+    await AsyncStorage.multiSet([
+      ["momoguard_token", token],
+      ["momoguard_user", JSON.stringify(user)],
+    ]);
+    return;
+  }
+  await SecureStore.setItemAsync("momoguard_token", token);
+  await SecureStore.setItemAsync("momoguard_user", JSON.stringify(user));
+}
+
+async function loadSession() {
+  if (Platform.OS === "web") {
+    const [[, token], [, user]] = await AsyncStorage.multiGet([
+      "momoguard_token",
+      "momoguard_user",
+    ]);
+    return token && user ? { token, user: JSON.parse(user) } : null;
+  }
+  const token = await SecureStore.getItemAsync("momoguard_token");
+  const user = await SecureStore.getItemAsync("momoguard_user");
+  return token && user ? { token, user: JSON.parse(user) } : null;
+}
+
+async function clearSession() {
+  if (Platform.OS === "web") {
+    await AsyncStorage.multiRemove(["momoguard_token", "momoguard_user"]);
+    return;
+  }
+  await SecureStore.deleteItemAsync("momoguard_token");
+  await SecureStore.deleteItemAsync("momoguard_user");
+}
 // Keep visual tokens in one place so every screen uses the same security-focused palette.
 const COLORS = {
   bg: "#07131f",
@@ -148,10 +190,7 @@ function AuthScreen({ onAuthenticated }) {
         return;
       }
 
-      await AsyncStorage.multiSet([
-        ["momoguard_token", result.token],
-        ["momoguard_user", JSON.stringify(result.user)],
-      ]);
+      await saveSession(result.token, result.user);
       onAuthenticated(result.user, result.token);
     } catch (requestError) {
       setError(
@@ -189,10 +228,7 @@ function AuthScreen({ onAuthenticated }) {
         setOtp("");
         return;
       }
-      await AsyncStorage.multiSet([
-        ["momoguard_token", pendingToken],
-        ["momoguard_user", JSON.stringify(pendingUser)],
-      ]);
+      await saveSession(pendingToken, pendingUser);
       onAuthenticated(pendingUser, pendingToken);
       setVerificationStep(null);
       setOtp("");
@@ -871,6 +907,9 @@ function NotificationSettings({ token }) {
     api("/settings", {}, token)
       .then(setSettings)
       .catch((requestError) => setError(requestError.message));
+    registerPushToken(token).catch((requestError) =>
+      setError(requestError.message),
+    );
   }, [token]);
   async function toggle(key, value) {
     // Notification preferences are account settings, not device-only UI state.
@@ -905,7 +944,69 @@ function NotificationSettings({ token }) {
   );
 }
 
-function ProfilePage({ screen, user, token, navigate }) {
+async function registerPushToken(token) {
+  if (Platform.OS === "web" || !Device.isDevice) return;
+  const permissions = await Notifications.getPermissionsAsync();
+  let status = permissions.status;
+  if (status !== "granted") {
+    status = (await Notifications.requestPermissionsAsync()).status;
+  }
+  if (status !== "granted") return;
+  const pushToken = (await Notifications.getExpoPushTokenAsync()).data;
+  await api(
+    "/notifications/push-token",
+    {
+      method: "POST",
+      body: JSON.stringify({ token: pushToken, platform: Platform.OS }),
+    },
+    token,
+  );
+}
+
+function ProfileEditor({ user, token, onUpdated }) {
+  const [name, setName] = useState(user.full_name || "");
+  const [phone, setPhone] = useState(user.phone || "");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await api(
+        "/users/me",
+        { method: "PUT", body: JSON.stringify({ full_name: name, phone }) },
+        token,
+      );
+      await saveSession(token, result.user);
+      onUpdated(result.user);
+      setMessage("Profile updated.");
+    } catch (requestError) {
+      setMessage(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View>
+      <Field label="Full name" value={name} onChangeText={setName} />
+      <Field
+        label="Ghana phone number"
+        value={phone}
+        onChangeText={setPhone}
+        keyboardType="phone-pad"
+        inputMode="tel"
+      />
+      {message ? <Text style={styles.safe}>{message}</Text> : null}
+      <Button onPress={save} disabled={busy || !name.trim() || !phone.trim()}>
+        {busy ? "Saving..." : "Save changes"}
+      </Button>
+    </View>
+  );
+}
+
+function ProfilePage({ screen, user, token, navigate, onUserUpdated }) {
   if (screen === "profile-devices")
     return <Devices token={token} navigate={navigate} />;
   const titles = {
@@ -922,9 +1023,12 @@ function ProfilePage({ screen, user, token, navigate }) {
       <View style={styles.panel}>
         {screen === "profile-personal" ? (
           <>
-            <SecurityRow label="Full name" value={user.full_name} />
-            <SecurityRow label="Phone" value={user.phone} />
             <SecurityRow label="Email" value={user.email} />
+            <ProfileEditor
+              user={user}
+              token={token}
+              onUpdated={onUserUpdated}
+            />
           </>
         ) : screen === "profile-notifications" ? (
           <NotificationSettings token={token} />
@@ -934,16 +1038,22 @@ function ProfilePage({ screen, user, token, navigate }) {
               Choose the display style for the security center.
             </Text>
             <View style={styles.actionGrid}>
-              <View style={styles.action}>
+              <Pressable
+                style={styles.action}
+                onPress={() => AsyncStorage.setItem("momoguard_theme", "dark")}
+              >
                 <Text style={styles.actionIcon}>*</Text>
                 <Text style={styles.cardTitle}>Dark</Text>
                 <Text style={styles.mutedSmall}>Security focused</Text>
-              </View>
-              <View style={styles.action}>
+              </Pressable>
+              <Pressable
+                style={styles.action}
+                onPress={() => AsyncStorage.setItem("momoguard_theme", "light")}
+              >
                 <Text style={styles.actionIcon}>O</Text>
                 <Text style={styles.cardTitle}>Light</Text>
                 <Text style={styles.mutedSmall}>Bright and clear</Text>
-              </View>
+              </Pressable>
             </View>
           </>
         ) : screen === "profile-help" ? (
@@ -995,21 +1105,19 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   // Restore the last authenticated session before rendering the main navigation.
   useEffect(() => {
-    AsyncStorage.multiGet(["momoguard_token", "momoguard_user"]).then(
-      ([tokenEntry, userEntry]) => {
-        if (tokenEntry[1] && userEntry[1]) {
-          setToken(tokenEntry[1]);
-          setUser(JSON.parse(userEntry[1]));
-        }
-      },
-    );
+    loadSession().then((session) => {
+      if (session) {
+        setToken(session.token);
+        setUser(session.user);
+      }
+    });
   }, []);
   function navigate(nextScreen, item) {
     setSelected(item || null);
     setScreen(nextScreen);
   }
   async function signOut() {
-    await AsyncStorage.multiRemove(["momoguard_token", "momoguard_user"]);
+    await clearSession();
     setToken(null);
     setUser(null);
     setScreen("home");
@@ -1046,6 +1154,7 @@ export default function App() {
         user={user}
         token={token}
         navigate={navigate}
+        onUserUpdated={setUser}
       />
     ) : screen === "analysis" ? (
       <Analysis token={token} transaction={selected} navigate={navigate} />
