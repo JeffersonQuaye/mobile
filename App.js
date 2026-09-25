@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
@@ -17,6 +18,15 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 const API_BASE =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
@@ -900,17 +910,74 @@ function ReportForm({ token, transaction, navigate }) {
   );
 }
 
+async function sendPushNotification(expoPushToken) {
+  if (!expoPushToken) {
+    throw new Error("Register this device for notifications first.");
+  }
+  const response = await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Accept-encoding": "gzip, deflate",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to: expoPushToken,
+      sound: "default",
+      title: "MoMoGuard security check",
+      body: "Push notifications are configured for this device.",
+      data: { screen: "alerts" },
+      channelId: "security",
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.data?.status === "error") {
+    throw new Error(
+      result.data?.message || "The push notification could not be sent.",
+    );
+  }
+  return result;
+}
+
 function NotificationSettings({ token }) {
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState("");
+  const [pushToken, setPushToken] = useState("");
+  const [lastNotification, setLastNotification] = useState(null);
+  const [sending, setSending] = useState(false);
   useEffect(() => {
     api("/settings", {}, token)
       .then(setSettings)
       .catch((requestError) => setError(requestError.message));
-    registerPushToken(token).catch((requestError) =>
-      setError(requestError.message),
+    registerPushToken(token)
+      .then((registeredToken) => setPushToken(registeredToken || ""))
+      .catch((requestError) => setError(requestError.message));
+
+    if (Platform.OS === "web") return undefined;
+    const receivedSubscription = Notifications.addNotificationReceivedListener(
+      (incomingNotification) => setLastNotification(incomingNotification),
     );
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) =>
+        setLastNotification(response.notification),
+      );
+    return () => {
+      receivedSubscription.remove();
+      responseSubscription.remove();
+    };
   }, [token]);
+
+  async function sendTestNotification() {
+    setSending(true);
+    setError("");
+    try {
+      await sendPushNotification(pushToken);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSending(false);
+    }
+  }
   async function toggle(key, value) {
     // Notification preferences are account settings, not device-only UI state.
     try {
@@ -928,6 +995,27 @@ function NotificationSettings({ token }) {
   return (
     <View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {pushToken ? (
+        <>
+          <Text style={styles.safe}>
+            This device is registered for push notifications.
+          </Text>
+          <Button secondary onPress={sendTestNotification} disabled={sending}>
+            {sending ? "Sending..." : "Send test notification"}
+          </Button>
+        </>
+      ) : null}
+      {lastNotification ? (
+        <View style={styles.notificationPreview}>
+          <Text style={styles.cardTitle}>Last notification received</Text>
+          <Text style={styles.mutedSmall}>
+            {lastNotification.request.content.title || "Security alert"}
+          </Text>
+          <Text style={styles.mutedSmall}>
+            {lastNotification.request.content.body || "No message body"}
+          </Text>
+        </View>
+      ) : null}
       {[
         ["security_alerts", "Security alerts"],
         ["transaction_updates", "Transaction updates"],
@@ -946,13 +1034,30 @@ function NotificationSettings({ token }) {
 
 async function registerPushToken(token) {
   if (Platform.OS === "web" || !Device.isDevice) return;
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("security", {
+      name: "Security alerts",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: COLORS.cyan,
+    });
+  }
   const permissions = await Notifications.getPermissionsAsync();
   let status = permissions.status;
   if (status !== "granted") {
     status = (await Notifications.requestPermissionsAsync()).status;
   }
   if (status !== "granted") return;
-  const pushToken = (await Notifications.getExpoPushTokenAsync()).data;
+  const projectId =
+    Constants.easConfig?.projectId ||
+    Constants.expoConfig?.extra?.eas?.projectId;
+  if (!projectId) {
+    throw new Error(
+      "Configure an Expo project ID before enabling push notifications.",
+    );
+  }
+  const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId }))
+    .data;
   await api(
     "/notifications/push-token",
     {
@@ -961,6 +1066,7 @@ async function registerPushToken(token) {
     },
     token,
   );
+  return pushToken;
 }
 
 function ProfileEditor({ user, token, onUpdated }) {
@@ -1606,6 +1712,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(80,213,208,.1)",
     padding: 13,
     borderRadius: 12,
+    marginTop: 12,
+  },
+  notificationPreview: {
+    backgroundColor: "rgba(121,215,161,.09)",
+    borderColor: "rgba(121,215,161,.24)",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 13,
     marginTop: 12,
   },
   nav: {
