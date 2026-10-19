@@ -8,7 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "node scripts/test-runner.js",
+    "test": "node scripts/test-runner.mjs",
     "test:components": "node --test __tests__/components/*.test.js",
     "test:e2e": "node --test __tests__/e2e/*.test.js",
     "lint": "eslint .",

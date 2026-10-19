@@ -9,27 +9,44 @@ import {
   getCache,
 } from "../../src/services/storage.js";
 import { getConfig, setRuntimeEnv, ENVIRONMENTS } from "../../src/config/env.js";
-
-// Ghana phone validation regex used in AuthScreen
-const GH_PHONE_REGEX = /^(\+233|0)[235][0-9]{8}$/;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import {
+  isValidEmail,
+  isValidGhanaPhone,
+  normalizePhone,
+} from "../../src/utils/validators.js";
+import {
+  formatCurrency,
+  formatSignedCurrency,
+  formatDateTime,
+  getFirstName,
+} from "../../src/utils/formatters.js";
 
 describe("Mobile End-to-End User Flow Tests", () => {
   describe("E2E Scenario 1: Authentication & Session Lifecycle", () => {
     it("validates input criteria before dispatching network request", () => {
       // Invalid phone
-      assert.strictEqual(GH_PHONE_REGEX.test("123456"), false);
-      assert.strictEqual(GH_PHONE_REGEX.test("+1234567890"), false);
+      assert.strictEqual(isValidGhanaPhone("123456"), false);
+      assert.strictEqual(isValidGhanaPhone("+1234567890"), false);
       // Valid Ghana MoMo phones (MTN/Telecel/AT prefixes)
-      assert.strictEqual(GH_PHONE_REGEX.test("0244123456"), true);
-      assert.strictEqual(GH_PHONE_REGEX.test("+233244123456"), true);
-      assert.strictEqual(GH_PHONE_REGEX.test("0551234567"), true);
+      assert.strictEqual(isValidGhanaPhone("0244123456"), true);
+      assert.strictEqual(isValidGhanaPhone("+233244123456"), true);
+      assert.strictEqual(isValidGhanaPhone("0551234567"), true);
+      assert.strictEqual(normalizePhone("+233 24 412 3456"), "+233244123456");
 
       // Invalid emails
-      assert.strictEqual(EMAIL_REGEX.test("plainaddress"), false);
-      assert.strictEqual(EMAIL_REGEX.test("user@domain"), false);
+      assert.strictEqual(isValidEmail("plainaddress"), false);
+      assert.strictEqual(isValidEmail("user@domain"), false);
       // Valid email
-      assert.strictEqual(EMAIL_REGEX.test("ghana.momo@example.com"), true);
+      assert.strictEqual(isValidEmail("ghana.momo@example.com"), true);
+
+      // Shared formatters
+      assert.strictEqual(formatCurrency(120), "GHS 120.00");
+      assert.strictEqual(formatCurrency(null), "GHS 0.00");
+      assert.strictEqual(formatSignedCurrency(50), "+ GHS 50.00");
+      assert.strictEqual(formatSignedCurrency(-25), "- GHS 25.00");
+      assert.strictEqual(formatDateTime(null, "Recent"), "Recent");
+      assert.ok(typeof formatDateTime("2026-10-12T14:00:00Z") === "string");
+      assert.strictEqual(getFirstName("Kwame Nkrumah"), "Kwame");
     });
 
     it("persists secure session to storage and restores on boot", async () => {

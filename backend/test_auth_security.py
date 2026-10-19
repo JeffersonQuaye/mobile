@@ -8,6 +8,7 @@ os.environ.setdefault("MOMOGUARD_AUTH_SECRET", "auth-test-secret")
 from backend import app as module
 
 
+@unittest.skipIf(not os.getenv("DATABASE_URL"), "Requires active PostgreSQL database connection")
 class AuthSecurityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

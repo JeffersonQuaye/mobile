@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -150,16 +151,29 @@ export function Header({ eyebrow, title, subtitle }) {
 export function Screen({
   children,
   scrollable = false,
+  onRefresh = null,
+  refreshing = false,
   refreshControl = null,
   contentContainerStyle,
 }) {
+  const effectiveRefreshControl =
+    refreshControl ||
+    (onRefresh ? (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        tintColor={colors.accent}
+        colors={[colors.accent]}
+      />
+    ) : null);
+
   if (scrollable) {
     return (
       <View style={styles.safe}>
         <ScrollView
           contentContainerStyle={[styles.content, contentContainerStyle]}
           keyboardShouldPersistTaps="handled"
-          refreshControl={refreshControl}
+          refreshControl={effectiveRefreshControl}
         >
           {children}
         </ScrollView>

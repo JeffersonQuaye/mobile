@@ -11,10 +11,11 @@ import { authService } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { colors, styles } from "../theme";
 import { Button, Field, FormError, Header } from "../components/UI";
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// Supports Ghanaian mobile money formats: 02X, 05X, +2332X, +2335X
-const GH_PHONE_REGEX = /^(\+233|0)[235][0-9]{8}$/;
+import {
+  isValidEmail,
+  isValidGhanaPhone,
+  normalizePhone,
+} from "../utils/validators";
 
 export default function AuthScreen() {
   const { login } = useAuth();
@@ -48,13 +49,12 @@ export default function AuthScreen() {
       if (!form.name.trim() || form.name.trim().length < 2) {
         errors.name = "Please enter your full legal name.";
       }
-      const cleanPhone = form.phone.replace(/[\s-]/g, "");
-      if (!cleanPhone || !GH_PHONE_REGEX.test(cleanPhone)) {
+      if (!isValidGhanaPhone(form.phone)) {
         errors.phone = "Enter a valid Ghana phone (e.g., 0244123456 or +233244123456).";
       }
     }
 
-    if (!form.email.trim() || !EMAIL_REGEX.test(form.email.trim())) {
+    if (!isValidEmail(form.email)) {
       errors.email = "Please enter a valid email address.";
     }
 
@@ -86,7 +86,7 @@ export default function AuthScreen() {
       const payload = registering
         ? {
             full_name: form.name.trim(),
-            phone: form.phone.replace(/[\s-]/g, ""),
+            phone: normalizePhone(form.phone),
             email: cleanEmail,
             password: form.password,
           }

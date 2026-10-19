@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   Pressable,
-  RefreshControl,
   Text,
   View,
 } from "react-native";
@@ -18,6 +17,7 @@ import {
   Screen,
   StatusBadge,
 } from "../components/UI";
+import { formatDateTime, formatSignedCurrency } from "../utils/formatters";
 
 export default function TransactionDetailScreen({ route, navigation }) {
   const { token } = useAuth();
@@ -90,31 +90,20 @@ export default function TransactionDetailScreen({ route, navigation }) {
   }
 
   const isIncome = Number(transaction.amount) >= 0;
-  const absAmount = Math.abs(Number(transaction.amount) || 0).toFixed(2);
   const currency = transaction.currency || "GHS";
+  const signedAmount = formatSignedCurrency(transaction.amount, currency);
   const isSuspicious =
     transaction.status === "REVIEW" ||
     transaction.status === "BLOCKED" ||
     (transaction.risk_score && transaction.risk_score > 50);
 
-  const formattedDate = transaction.occurred_at
-    ? new Date(transaction.occurred_at).toLocaleString("en-GB", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
-    : "Recent transaction";
+  const formattedDate = formatDateTime(transaction.occurred_at);
 
   return (
     <Screen
       scrollable
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => loadDetail(true)}
-          tintColor={colors.accent}
-          colors={[colors.accent]}
-        />
-      }
+      onRefresh={() => loadDetail(true)}
+      refreshing={refreshing}
     >
       {/* Top back navigation button */}
       <Pressable
@@ -156,14 +145,14 @@ export default function TransactionDetailScreen({ route, navigation }) {
             <Text style={styles.mutedSmall}>Transfer Amount</Text>
             <Text
               accessibilityRole="text"
-              accessibilityLabel={`Amount: ${isIncome ? "received" : "spent"} ${absAmount} ${currency}`}
+              accessibilityLabel={`Amount: ${signedAmount}`}
               style={[
                 styles.title,
                 isIncome ? styles.positive : { color: colors.text },
                 { fontSize: 32, marginVertical: 4 },
               ]}
             >
-              {isIncome ? "+" : "-"} {currency} {absAmount}
+              {signedAmount}
             </Text>
           </View>
           <StatusBadge status={transaction.status} />

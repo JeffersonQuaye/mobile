@@ -18,6 +18,8 @@ import {
   Screen,
   StatusBadge,
 } from "../components/UI";
+import { formatCurrency, formatDateTime } from "../utils/formatters";
+import { isValidGhanaPhone, normalizePhone } from "../utils/validators";
 
 const FRAUD_CATEGORIES = [
   {
@@ -75,6 +77,9 @@ export default function ReportScreen({ route, navigation }) {
       errors.description =
         "Please provide more detail (minimum 15 characters). Explain what happened.";
     }
+    if (phoneNumber.trim() && !isValidGhanaPhone(phoneNumber)) {
+      errors.phone = "Please enter a valid Ghana phone number.";
+    }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -91,8 +96,9 @@ export default function ReportScreen({ route, navigation }) {
 
     setBusy(true);
     try {
-      const fullDescription = phoneNumber.trim()
-        ? `${description.trim()}\n[Contact phone: ${phoneNumber.trim()}]`
+      const cleanPhone = normalizePhone(phoneNumber);
+      const fullDescription = cleanPhone
+        ? `${description.trim()}\n[Contact phone: ${cleanPhone}]`
         : description.trim();
 
       const response = await reportsService.submit(
@@ -116,9 +122,7 @@ export default function ReportScreen({ route, navigation }) {
 
   // Success Confirmation Screen
   if (submittedReport) {
-    const reportDate = submittedReport.created_at
-      ? new Date(submittedReport.created_at).toLocaleString("en-GB")
-      : new Date().toLocaleString("en-GB");
+    const reportDate = formatDateTime(submittedReport.created_at, "Just now");
 
     return (
       <Screen scrollable>
@@ -256,7 +260,7 @@ export default function ReportScreen({ route, navigation }) {
             Disputed Transaction Attached
           </Text>
           <Text style={[styles.muted, { marginTop: 4 }]}>
-            {transaction.merchant} • GHS {Math.abs(transaction.amount).toFixed(2)}
+            {transaction.merchant} • {formatCurrency(transaction.amount)}
           </Text>
           <Text style={styles.mutedSmall}>Ref: {transaction.id}</Text>
         </Card>

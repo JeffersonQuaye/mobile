@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Pressable,
-  RefreshControl,
   Text,
   TextInput,
   View,
@@ -87,14 +86,8 @@ export default function TransactionsScreen({ navigation }) {
   return (
     <Screen
       scrollable
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={refresh}
-          tintColor={colors.accent}
-          colors={[colors.accent]}
-        />
-      }
+      onRefresh={refresh}
+      refreshing={refreshing}
     >
       {(!isOnline || isOffline) && (
         <OfflineBanner

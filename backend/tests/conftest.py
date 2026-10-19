@@ -145,12 +145,15 @@ class InMemoryDatabase:
             return MockResult([settings])
 
         if "UPDATE user_settings SET" in q:
-            uid = str(params[1])
+            uid = str(params[-1])
             if uid not in self.user_settings:
                 self.user_settings[uid] = {"two_factor": False, "ai_monitoring": True, "real_time_alerts": True}
-            for k in ("two_factor", "ai_monitoring", "real_time_alerts"):
+            param_idx = 0
+            for k in ("two_factor", "ai_monitoring", "real_time_alerts", "security_alerts", "transaction_updates", "product_updates"):
                 if f"{k} = %s" in q:
-                    self.user_settings[uid][k] = bool(params[0])
+                    if param_idx < len(params) - 1:
+                        self.user_settings[uid][k] = bool(params[param_idx])
+                        param_idx += 1
             return MockResult([self.user_settings[uid]])
 
         # TRANSACTIONS

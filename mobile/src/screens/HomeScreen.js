@@ -1,7 +1,6 @@
 import React from "react";
 import {
   Pressable,
-  RefreshControl,
   Text,
   View,
 } from "react-native";
@@ -20,6 +19,7 @@ import {
   Screen,
 } from "../components/UI";
 import { TransactionRow } from "../components/TransactionRow";
+import { formatCurrency, getFirstName } from "../utils/formatters";
 
 export default function HomeScreen({ navigation }) {
   const { user, token } = useAuth();
@@ -38,10 +38,9 @@ export default function HomeScreen({ navigation }) {
 
   const {
     data: txData,
-    loading: txLoading,
   } = useApi("/transactions", token);
 
-  const firstName = (user?.full_name || "Member").split(" ")[0];
+  const firstName = getFirstName(user?.full_name);
 
   if (dashboardLoading && !dashboardData) {
     return (
@@ -68,23 +67,17 @@ export default function HomeScreen({ navigation }) {
     );
   }
 
-  const balance = Number(dashboardData?.balance || 0).toFixed(2);
-  const income = Number(dashboardData?.income || 0).toFixed(2);
-  const spending = Number(dashboardData?.spending || 0).toFixed(2);
+  const balance = formatCurrency(dashboardData?.balance);
+  const income = formatCurrency(dashboardData?.income);
+  const spending = formatCurrency(dashboardData?.spending);
   const securityScore = Number(dashboardData?.security_score || 0);
   const recentTransactions = (txData?.items || []).slice(0, 3);
 
   return (
     <Screen
       scrollable
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={refresh}
-          tintColor={colors.accent}
-          colors={[colors.accent]}
-        />
-      }
+      onRefresh={refresh}
+      refreshing={refreshing}
     >
       {(!isOnline || isOffline) && (
         <OfflineBanner
@@ -107,7 +100,7 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.label}>ESTIMATED AVAILABLE BALANCE</Text>
         <Text
           accessibilityRole="text"
-          accessibilityLabel={`Available balance: ${balance} Ghana cedis`}
+          accessibilityLabel={`Available balance: ${balance}`}
           style={{
             color: colors.text,
             fontSize: 34,
@@ -116,7 +109,7 @@ export default function HomeScreen({ navigation }) {
             marginVertical: 4,
           }}
         >
-          GHS {balance}
+          {balance}
         </Text>
 
         <View
@@ -131,12 +124,12 @@ export default function HomeScreen({ navigation }) {
         >
           <View>
             <Text style={styles.mutedSmall}>Total Inflows</Text>
-            <Text style={[styles.positive, { fontSize: 16 }]}>+ GHS {income}</Text>
+            <Text style={[styles.positive, { fontSize: 16 }]}>+ {income}</Text>
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <Text style={styles.mutedSmall}>Total Outflows</Text>
             <Text style={{ color: colors.text, fontSize: 16, fontWeight: "700" }}>
-              - GHS {spending}
+              - {spending}
             </Text>
           </View>
         </View>

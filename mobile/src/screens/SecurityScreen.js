@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
-  RefreshControl,
+  Alert,
+  Platform,
   Switch,
   Text,
   View,
@@ -53,7 +54,14 @@ export default function SecurityScreen() {
 
   async function handleToggle(key, value) {
     if (!isOnline) {
-      alert("You need an internet connection to update security configurations.");
+      if (Platform.OS === "web") {
+        window.alert("You need an internet connection to update security configurations.");
+      } else {
+        Alert.alert(
+          "Offline",
+          "You need an internet connection to update security configurations.",
+        );
+      }
       return;
     }
     setUpdatingKey(key);
@@ -113,14 +121,8 @@ export default function SecurityScreen() {
   return (
     <Screen
       scrollable
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => load(true)}
-          tintColor={colors.accent}
-          colors={[colors.accent]}
-        />
-      }
+      onRefresh={() => load(true)}
+      refreshing={refreshing}
     >
       {!isOnline && (
         <OfflineBanner message="Offline: Security changes require an active connection." />

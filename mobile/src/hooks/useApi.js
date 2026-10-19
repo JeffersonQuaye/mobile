@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../services/api";
 import { getCache, setCache } from "../services/storage";
 
@@ -10,24 +10,30 @@ export function useApi(path, token, options = {}) {
   const [isCached, setIsCached] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
+  const method = options.method || "GET";
   const cacheKey = options.cacheKey || path;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
   const load = useCallback(
     async (isManualRefresh = false) => {
       if (isManualRefresh) {
         setRefreshing(true);
-      } else if (!data) {
+      } else if (!dataRef.current) {
         setLoading(true);
       }
       setError("");
 
       try {
-        const result = await api(path, options, token);
+        const result = await api(path, optionsRef.current, token);
         setData(result);
         setIsCached(false);
         setIsOffline(false);
         // Persist to offline cache for GET requests
-        if (!options.method || options.method === "GET") {
+        if (method === "GET") {
           await setCache(cacheKey, result);
         }
       } catch (requestError) {
@@ -62,14 +68,15 @@ export function useApi(path, token, options = {}) {
         setRefreshing(false);
       }
     },
-    [path, token, cacheKey, data, options],
+    [path, token, cacheKey, method],
   );
 
   useEffect(() => {
     load();
-  }, [path, token]);
+  }, [load]);
 
   const refresh = useCallback(() => load(true), [load]);
+  const retry = useCallback(() => load(false), [load]);
 
   return {
     data,
@@ -78,7 +85,7 @@ export function useApi(path, token, options = {}) {
     error,
     isCached,
     isOffline,
-    retry: () => load(false),
+    retry,
     refresh,
   };
 }

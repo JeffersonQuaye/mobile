@@ -220,6 +220,44 @@ def ensure_settings(connection, user_id):
     )
 
 
+def calculate_security_score(checks):
+    if not checks:
+        return 0
+    return round(sum(bool(value) for value in checks.values()) / len(checks) * 100)
+
+
+def dispatch_verification_challenge(user, purpose, status_code=200):
+    try:
+        send_verification(user["phone"])
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 503
+    key = "requires_phone_verification" if purpose == "phone" else "requires_2fa"
+    return jsonify({
+        "user": public_user(user),
+        key: True,
+        "challenge_token": challenge_token(user, purpose),
+    }), status_code
+
+
+def update_user_settings(connection, user_id, settings_dict):
+    ensure_settings(connection, user_id)
+    if not settings_dict:
+        return
+    set_clauses = [f"{key} = %s" for key in settings_dict.keys()]
+    query = f"UPDATE user_settings SET {', '.join(set_clauses)}, updated_at = now() WHERE user_id = %s"
+    connection.execute(query, list(settings_dict.values()) + [user_id])
+
+
+TRANSACTION_BASE_QUERY = """
+    SELECT t.*, COALESCE(fp.risk_score, 0) risk_score,
+           CASE WHEN fp.decision IN ('REVIEW', 'BLOCKED') THEN 'REVIEW' ELSE 'SAFE' END status,
+           d.device_name device
+    FROM transactions t
+    LEFT JOIN LATERAL (SELECT * FROM fraud_predictions WHERE transaction_id = t.id ORDER BY created_at DESC LIMIT 1) fp ON TRUE
+    LEFT JOIN devices d ON d.id = t.device_id
+"""
+
+
 def assess_fraud(payload):
     return assess_trained_fraud(payload)
 
@@ -319,15 +357,11 @@ def register():
             audit(connection, user["id"], "USER_REGISTERED", "user", user["id"])
             if app.config.get("TESTING"):
                 return jsonify(auth_response(connection, user)), 201
-            try:
-                send_verification(user["phone"])
-            except RuntimeError as error:
-                return jsonify({"error": str(error)}), 503
+            return dispatch_verification_challenge(user, "phone", 201)
     except UniqueViolation:
         return jsonify({"error": "An account with this email or phone already exists"}), 409
     except (RuntimeError, psycopg.Error):
         return jsonify({"error": "The account service is temporarily unavailable"}), 503
-    return jsonify({"user": public_user(user), "requires_phone_verification": True, "challenge_token": challenge_token(user, "phone")}), 201
 
 
 @app.post("/api/auth/login")
@@ -352,17 +386,9 @@ def login():
             if app.config.get("TESTING"):
                 return jsonify(auth_response(connection, user))
             if not user["phone_verified"]:
-                try:
-                    send_verification(user["phone"])
-                except RuntimeError as error:
-                    return jsonify({"error": str(error)}), 503
-                return jsonify({"user": public_user(user), "requires_phone_verification": True, "challenge_token": challenge_token(user, "phone")})
+                return dispatch_verification_challenge(user, "phone")
             if user["two_factor_enabled"]:
-                try:
-                    send_verification(user["phone"])
-                except RuntimeError as error:
-                    return jsonify({"error": str(error)}), 503
-                return jsonify({"user": public_user(user), "requires_2fa": True, "challenge_token": challenge_token(user, "2fa")})
+                return dispatch_verification_challenge(user, "2fa")
             return jsonify(auth_response(connection, user))
     except (RuntimeError, psycopg.Error):
         return jsonify({"error": "The account service is temporarily unavailable"}), 503
@@ -386,11 +412,7 @@ def verify_phone():
         updated = connection.execute("UPDATE users SET phone_verified = true WHERE id = %s RETURNING id, full_name, phone, email, role, phone_verified, two_factor_enabled", (user["id"],)).fetchone()
         audit(connection, user["id"], "PHONE_VERIFIED", "user", user["id"])
         if updated["two_factor_enabled"] and not app.config.get("TESTING"):
-            try:
-                send_verification(updated["phone"])
-            except RuntimeError as error:
-                return jsonify({"error": str(error)}), 503
-            return jsonify({"user": public_user(updated), "requires_2fa": True, "challenge_token": challenge_token(updated, "2fa")})
+            return dispatch_verification_challenge(updated, "2fa")
         return jsonify(auth_response(connection, updated))
 
 
@@ -487,7 +509,7 @@ def dashboard():
             (user["id"],),
         ).fetchone()
     checks = dict(settings or {})
-    score = round(sum(bool(value) for value in checks.values()) / len(checks) * 100) if checks else 0
+    score = calculate_security_score(checks)
     return jsonify({"user": public_user(user), "balance": float(totals["income"] - totals["spending"]), "income": float(totals["income"]), "spending": float(totals["spending"]), "currency": "GHS", "security_score": score})
 
 
@@ -498,13 +520,7 @@ def transactions():
         return error
     with database_connection() as connection:
         rows = connection.execute(
-            """SELECT t.*, COALESCE(fp.risk_score, 0) risk_score,
-                      CASE WHEN fp.decision IN ('REVIEW', 'BLOCKED') THEN 'REVIEW' ELSE 'SAFE' END status,
-                      d.device_name device
-               FROM transactions t
-               LEFT JOIN LATERAL (SELECT * FROM fraud_predictions WHERE transaction_id = t.id ORDER BY created_at DESC LIMIT 1) fp ON TRUE
-               LEFT JOIN devices d ON d.id = t.device_id
-               WHERE t.user_id = %s ORDER BY t.occurred_at DESC""",
+            f"{TRANSACTION_BASE_QUERY} WHERE t.user_id = %s ORDER BY t.occurred_at DESC",
             (user["id"],),
         ).fetchall()
     return jsonify({"items": [transaction_payload(row) for row in rows], "total": len(rows)})
@@ -565,13 +581,7 @@ def transaction_detail(transaction_id):
         return error
     with database_connection() as connection:
         row = connection.execute(
-            """SELECT t.*, COALESCE(fp.risk_score, 0) risk_score,
-                      CASE WHEN fp.decision IN ('REVIEW', 'BLOCKED') THEN 'REVIEW' ELSE 'SAFE' END status,
-                      d.device_name device
-               FROM transactions t LEFT JOIN LATERAL
-               (SELECT * FROM fraud_predictions WHERE transaction_id = t.id ORDER BY created_at DESC LIMIT 1) fp ON TRUE
-               LEFT JOIN devices d ON d.id = t.device_id
-               WHERE t.user_id = %s AND (t.id::text = %s OR t.reference = %s)""",
+            f"{TRANSACTION_BASE_QUERY} WHERE t.user_id = %s AND (t.id::text = %s OR t.reference = %s)",
             (user["id"], transaction_id, transaction_id),
         ).fetchone()
     return jsonify(transaction_payload(row)) if row else (jsonify({"error": "Transaction not found"}), 404)
@@ -643,8 +653,8 @@ def security():
     with database_connection() as connection:
         ensure_settings(connection, user["id"])
         row = connection.execute("SELECT two_factor, ai_monitoring, real_time_alerts FROM user_settings WHERE user_id = %s", (user["id"],)).fetchone()
-    checks = dict(row)
-    score = round(sum(bool(value) for value in checks.values()) / len(checks) * 100)
+    checks = dict(row or {})
+    score = calculate_security_score(checks)
     return jsonify({"score": score, "level": "EXCELLENT" if score >= 90 else "NEEDS ATTENTION", "checks": checks})
 
 
@@ -656,9 +666,7 @@ def update_security():
     payload = request.get_json(silent=True) or {}
     allowed = {key: bool(payload[key]) for key in ("two_factor", "ai_monitoring", "real_time_alerts") if key in payload}
     with database_connection() as connection:
-        ensure_settings(connection, user["id"])
-        for key, value in allowed.items():
-            connection.execute(f"UPDATE user_settings SET {key} = %s, updated_at = now() WHERE user_id = %s", (value, user["id"]))
+        update_user_settings(connection, user["id"], allowed)
         audit(connection, user["id"], "SECURITY_SETTINGS_UPDATED", "user_settings", user["id"], allowed)
     return security()
 
@@ -671,7 +679,7 @@ def settings():
     with database_connection() as connection:
         ensure_settings(connection, user["id"])
         row = connection.execute("SELECT security_alerts, transaction_updates, product_updates FROM user_settings WHERE user_id = %s", (user["id"],)).fetchone()
-    return jsonify(dict(row))
+    return jsonify(dict(row or {}))
 
 
 @app.put("/api/settings")
@@ -682,9 +690,7 @@ def update_settings():
     payload = request.get_json(silent=True) or {}
     allowed = {key: bool(payload[key]) for key in ("security_alerts", "transaction_updates", "product_updates") if key in payload}
     with database_connection() as connection:
-        ensure_settings(connection, user["id"])
-        for key, value in allowed.items():
-            connection.execute(f"UPDATE user_settings SET {key} = %s, updated_at = now() WHERE user_id = %s", (value, user["id"]))
+        update_user_settings(connection, user["id"], allowed)
     return settings()
 
 

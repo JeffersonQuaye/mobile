@@ -2,15 +2,17 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { colors, styles } from "../theme";
 import { StatusBadge } from "./UI";
+import { formatAmount, formatSignedCurrency } from "../utils/formatters";
 
 export function TransactionRow({ transaction, onPress }) {
   const isIncome = Number(transaction.amount) >= 0;
-  const absAmount = Math.abs(Number(transaction.amount) || 0).toFixed(2);
   const currency = transaction.currency || "GHS";
+  const formattedAmount = formatAmount(transaction.amount);
+  const signedAmount = formatSignedCurrency(transaction.amount, currency);
 
   const accessibilityLabel = `${transaction.merchant || "Transaction"}, ${
     isIncome ? "received" : "spent"
-  } ${absAmount} ${currency}, recipient ${
+  } ${formattedAmount} ${currency}, recipient ${
     transaction.recipient || "unknown"
   }, status ${transaction.status || "SAFE"}. Tap for transaction details.`;
 
@@ -55,7 +57,7 @@ export function TransactionRow({ transaction, onPress }) {
             isIncome ? styles.positive : { color: colors.text },
           ]}
         >
-          {isIncome ? "+" : "-"} {currency} {absAmount}
+          {signedAmount}
         </Text>
         <StatusBadge status={transaction.status} />
       </View>

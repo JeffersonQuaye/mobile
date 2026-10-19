@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  RefreshControl,
   Text,
   View,
 } from "react-native";
@@ -19,6 +18,7 @@ import {
   Screen,
   StatusBadge,
 } from "../components/UI";
+import { formatDateTime } from "../utils/formatters";
 
 export default function AlertsScreen() {
   const { token } = useAuth();
@@ -76,14 +76,8 @@ export default function AlertsScreen() {
   return (
     <Screen
       scrollable
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={refresh}
-          tintColor={colors.accent}
-          colors={[colors.accent]}
-        />
-      }
+      onRefresh={refresh}
+      refreshing={refreshing}
     >
       {(!isOnline || isOffline) && (
         <OfflineBanner
@@ -109,12 +103,7 @@ export default function AlertsScreen() {
         items.map((alert) => {
           const isResolved = alert.status === "RESOLVED";
           const isBusy = resolvingId === alert.id;
-          const formattedDate = alert.created_at
-            ? new Date(alert.created_at).toLocaleString("en-GB", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })
-            : "Recent";
+          const formattedDate = formatDateTime(alert.created_at, "Recent");
 
           return (
             <Card
