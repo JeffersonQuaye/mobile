@@ -1,0 +1,18 @@
+{
+  "model_name": "momoguard-fraud-logistic-regression",
+  "model_version": "1.0.0",
+  "dataset": "fraud_transactions.csv",
+  "samples": 40,
+  "test_samples": 10,
+  "accuracy": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "false_positive_rate": 0.0,
+  "false_negative_rate": 0.0,
+  "confusion_matrix": {
+    "true_negative": 5,
+    "false_positive": 0,
+    "false_negative": 0,
+    "true_positive": 5
+  }
+}

@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+.venv-1
+__pycache__
+*.pyc
+.env
+.pytest_cache
+.coverage
+htmlcov
+
+mobile
+.test-dist
+.test-cache
+node_modules
+README.md

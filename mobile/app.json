@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "MoMoGuard",
+    "slug": "momoguard",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#07131f"
+    },
+    "android": {
+      "package": "com.momoguard.app"
+    },
+    "ios": {
+      "bundleIdentifier": "com.momoguard.app"
+    },
+    "plugins": ["expo-secure-store", "expo-notifications"]
+  }
+}
