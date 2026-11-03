@@ -1,0 +1,75 @@
+{
+    "validation_results": {
+        "Random Forest": {
+            "threshold": 0.81,
+            "precision": 0.8205128205128205,
+            "recall": 0.1635434412265758,
+            "f1": 0.2727272727272727
+        },
+        "HistGradientBoosting": {
+            "threshold": 0.99,
+            "precision": 0.6329113924050633,
+            "recall": 0.21294718909710392,
+            "f1": 0.3186743148502231
+        },
+        "SGD Logistic Classifier": {
+            "threshold": 0.9600000000000001,
+            "precision": 0.12881915772089184,
+            "recall": 0.13287904599659284,
+            "f1": 0.13081761006289308
+        }
+    },
+    "test_results": {
+        "Random Forest": {
+            "threshold": 0.81,
+            "precision": 0.9223744292237442,
+            "recall": 0.16237942122186494,
+            "f1": 0.2761449077238551,
+            "pr_auc": 0.20633312796266684,
+            "roc_auc": 0.8074008921377034,
+            "true_negatives": 88197,
+            "false_positives": 17,
+            "false_negatives": 1042,
+            "true_positives": 202
+        },
+        "HistGradientBoosting": {
+            "threshold": 0.99,
+            "precision": 0.6740576496674058,
+            "recall": 0.24437299035369775,
+            "f1": 0.35870206489675516,
+            "pr_auc": 0.3188523341081563,
+            "roc_auc": 0.9005272283631802,
+            "true_negatives": 88067,
+            "false_positives": 147,
+            "false_negatives": 940,
+            "true_positives": 304
+        },
+        "SGD Logistic Classifier": {
+            "threshold": 0.9600000000000001,
+            "precision": 0.31866666666666665,
+            "recall": 0.19212218649517684,
+            "f1": 0.23971915747241726,
+            "pr_auc": 0.1792464424712145,
+            "roc_auc": 0.8971650313688351,
+            "true_negatives": 87703,
+            "false_positives": 511,
+            "false_negatives": 1005,
+            "true_positives": 239
+        }
+    },
+    "best_model_by_validation_f1": "HistGradientBoosting",
+    "feature_columns": [
+        "amount",
+        "type",
+        "step"
+    ],
+    "histgradientboosting_type_mapping": {
+        "CASH_IN": 0,
+        "CASH_OUT": 1,
+        "DEBIT": 2,
+        "PAYMENT": 3,
+        "TRANSFER": 4
+    },
+    "histgradientboosting_type_mapping_file": "C:\\Users\\maste\\Documents\\GitHub\\Projects\\Final year project\\517-personal-finance-tracker-a-application-that-helps-users-mana\\backend\\ml\\models\\comparison\\histgradientboosting_type_mapping.pkl",
+    "sklearn_version": "1.9.1"
+}

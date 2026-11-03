@@ -1,12 +1,21 @@
+/**
+ * MoMoGuard Persistence & Secure Storage Service
+ * -----------------------------------------------
+ * Provides a hybrid storage abstraction for credentials and offline caching.
+ *
+ * Security Architecture:
+ * 1. Hardware-Backed Encryption: On native iOS and Android, authentication tokens and user
+ *    profiles are persisted to iOS Keychain / Android Keystore via `expo-secure-store`.
+ * 2. Web & Non-Hardware Fallback: Gracefully falls back to standard `AsyncStorage` on Web.
+ * 3. Offline Data Caching: Caches API responses (wallet ledger, security checks) with timestamped
+ *    metadata for offline resilience during network outages.
+ */
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-const SESSION_KEYS = [
-  "momoguard_user",
-  "momoguard_token",
-  "momoguard_refresh_token",
-];
+const SESSION_KEYS = ["momoguard_user", "momoguard_token", "momoguard_refresh_token"];
 const ENV_KEY = "momoguard_env_preference";
 const CACHE_PREFIX = "momoguard_cache_";
 
@@ -73,9 +82,7 @@ export async function clearSession() {
     const secure = await isSecureStoreAvailable();
     if (secure) {
       await Promise.all(
-        SESSION_KEYS.map((k) =>
-          SecureStore.deleteItemAsync(k).catch(() => {}),
-        ),
+        SESSION_KEYS.map((k) => SecureStore.deleteItemAsync(k).catch(() => {})),
       );
     }
     await AsyncStorage.multiRemove(SESSION_KEYS).catch(() => {});

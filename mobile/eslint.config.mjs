@@ -14,13 +14,13 @@ export default [
       "no-unused-vars": [
         "warn",
         {
-          "argsIgnorePattern": "^_",
-          "varsIgnorePattern": "^(React|_.*)$",
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^(React|_.*)$",
         },
       ],
       "no-undef": "off",
       "no-console": "off",
-      "semi": ["warn", "always"],
+      semi: ["warn", "always"],
     },
   },
   {

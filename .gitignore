@@ -13,3 +13,9 @@ mobile/dist/
 mobile/.test-dist/
 .test-dist/
 .expo/
+.vscode/
+
+# Local datasets and generated ML model artifacts
+backend/data/*.csv
+backend/ml/models/**/*.pkl
+backend/models/*.joblib

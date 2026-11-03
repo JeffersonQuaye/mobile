@@ -1,3 +1,18 @@
+"""
+MoMoGuard Core Backend Application
+----------------------------------
+This is the primary Flask API service for MoMoGuard, a mobile-money security application.
+It provides endpoints for:
+1. User Authentication & 2FA: Secure registration, timed token issuance, refresh rotation,
+   session revocation, phone SMS verification challenges, and two-factor authentication.
+2. Real-Time Fraud Detection: Dual evaluation engine combining machine learning classification
+   with heuristics (velocity checks, unusual amounts, late-night transfers, untrusted devices).
+3. Wallet & Activity Ledger: Transaction history, live balance aggregates, and detailed audits.
+4. Security Management: Biometric device registration, AI monitoring toggles, and alert workflows.
+5. AI Security Assistant: Conversational chatbot offering guidance on social engineering and fraud.
+6. Telemetry & Observability: Prometheus metrics exposition, health/ready probes, and JSON logs.
+"""
+
 import hashlib
 import json
 import secrets
@@ -11,6 +26,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from psycopg.connection import logger
 from psycopg.errors import UniqueViolation
 from psycopg.rows import dict_row
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -37,6 +53,11 @@ try:
 except ImportError:
     from logging_config import setup_monitoring_and_logging, metrics
 
+try:
+    from .in_memory_db import get_in_memory_database
+except ImportError:
+    from in_memory_db import get_in_memory_database
+
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 app = Flask(__name__)
@@ -44,12 +65,16 @@ setup_monitoring_and_logging(app)
 DATABASE_URL = os.getenv("DATABASE_URL")
 AUTH_SECRET = os.getenv("MOMOGUARD_AUTH_SECRET")
 if not AUTH_SECRET:
-    raise RuntimeError("MOMOGUARD_AUTH_SECRET must be configured")
+    if os.getenv("FLASK_ENV") == "production":
+        raise RuntimeError("MOMOGUARD_AUTH_SECRET must be configured in production")
+    AUTH_SECRET = "momoguard-dev-local-secret-key-32-chars-minimum"
 TOKEN_SERIALIZER = URLSafeTimedSerializer(AUTH_SECRET, salt="momoguard-auth")
 ACCESS_TOKEN_TTL = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", "900"))
 REFRESH_TOKEN_TTL = int(os.getenv("REFRESH_TOKEN_TTL_SECONDS", "2592000"))
 OTP_TTL = int(os.getenv("OTP_TTL_SECONDS", "300"))
 allowed_origins = [item.strip() for item in os.getenv("CORS_ORIGINS", "").split(",") if item.strip()]
+if not allowed_origins:
+    allowed_origins = ["http://localhost:8081", "http://127.0.0.1:8081", "http://localhost:19006"]
 CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
 redis_client = None
@@ -75,25 +100,54 @@ else:
     limiter = _Limiter()
 
 
-def database_connection():
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL is not configured")
-    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+# ---------------------------------------------------------------------------
+# 1. Database Connection Management
+# ---------------------------------------------------------------------------
 
+def database_connection():
+    """
+    Yields an active database connection context manager.
+    In production: Connects to PostgreSQL using psycopg with dict_row factory.
+    In development / testing: Automatically falls back to the hermetic in-memory database.
+    """
+    if not DATABASE_URL:
+        return get_in_memory_database()
+    try:
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    except Exception:
+        if os.getenv("FLASK_ENV") != "production":
+            return get_in_memory_database()
+        raise
+    
+def database_backend():
+    return "postgresql" if DATABASE_URL else "in-memory"
+
+
+# ---------------------------------------------------------------------------
+# 2. Cryptographic Security & Token Serialization Helpers
+# ---------------------------------------------------------------------------
 
 def public_user(user):
-    return {key: value for key, value in dict(user).items() if key not in {"password_hash", "phone_verified", "two_factor_enabled", "session_id", "user_id"}}
+    """Sanitizes user dictionary by removing sensitive security fields before JSON response."""
+    return {
+        key: value
+        for key, value in dict(user).items()
+        if key not in {"password_hash", "phone_verified", "two_factor_enabled", "session_id", "user_id"}
+    }
 
 
 def issue_token(user):
+    """Generates a cryptographically signed timed access token (URLSafeTimedSerializer)."""
     return TOKEN_SERIALIZER.dumps({"user_id": str(user["id"]), "token_type": "access"})
 
 
 def token_hash(token):
+    """Computes a SHA-256 hash of a refresh token to safely store in the database."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_refresh_token(connection, user_id):
+    """Creates a high-entropy 48-byte URL-safe refresh token and persists its SHA-256 hash."""
     token = secrets.token_urlsafe(48)
     connection.execute(
         """INSERT INTO auth_sessions (user_id, refresh_token_hash, expires_at)
@@ -104,6 +158,7 @@ def create_refresh_token(connection, user_id):
 
 
 def auth_response(connection, user):
+    """Builds a standard authentication payload containing access token, refresh token, and profile."""
     return {
         "token": issue_token(user),
         "refresh_token": create_refresh_token(connection, user["id"]),
@@ -113,10 +168,12 @@ def auth_response(connection, user):
 
 
 def challenge_token(user, purpose):
+    """Issues a short-lived (10 min) signed challenge token for 2FA or phone verification."""
     return TOKEN_SERIALIZER.dumps({"user_id": str(user["id"]), "purpose": purpose, "token_type": "challenge"})
 
 
 def challenge_user(token, purpose):
+    """Decodes and validates a challenge token, returning the corresponding user record."""
     try:
         claims = TOKEN_SERIALIZER.loads(token, max_age=600)
     except (BadSignature, SignatureExpired, KeyError):
@@ -124,10 +181,18 @@ def challenge_user(token, purpose):
     if claims.get("token_type") != "challenge" or claims.get("purpose") != purpose:
         return None
     with database_connection() as connection:
-        return connection.execute("SELECT id, full_name, phone, email, role, phone_verified, two_factor_enabled FROM users WHERE id = %s", (claims["user_id"],)).fetchone()
+        return connection.execute(
+            "SELECT id, full_name, phone, email, role, phone_verified, two_factor_enabled FROM users WHERE id = %s",
+            (claims["user_id"],),
+        ).fetchone()
 
+
+# ---------------------------------------------------------------------------
+# 3. Phone Verification & Anti-Brute-Force Rate Limiting
+# ---------------------------------------------------------------------------
 
 def send_verification(phone):
+    """Dispatches a one-time SMS verification code via Twilio Verify API."""
     account_sid = os.getenv("TWILIO_ACCOUNT_SID")
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
     service_sid = os.getenv("TWILIO_VERIFY_SERVICE_SID")
@@ -138,6 +203,7 @@ def send_verification(phone):
 
 
 def check_verification(phone, code):
+    """Validates an incoming OTP code against the Twilio Verify service."""
     account_sid = os.getenv("TWILIO_ACCOUNT_SID")
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
     service_sid = os.getenv("TWILIO_VERIFY_SERVICE_SID")
@@ -149,6 +215,7 @@ def check_verification(phone, code):
 
 
 def login_is_blocked(identifier):
+    """Checks Redis to see if the user/IP has exceeded 5 failed login attempts in 15 minutes."""
     if not redis_client:
         return False
     try:
@@ -158,6 +225,7 @@ def login_is_blocked(identifier):
 
 
 def record_login_failure(identifier):
+    """Increments failed login counter in Redis with a 15-minute sliding TTL window."""
     if not redis_client:
         return
     key = f"auth:failed:{identifier}"
@@ -170,6 +238,7 @@ def record_login_failure(identifier):
 
 
 def clear_login_failures(identifier):
+    """Resets failed login counter in Redis upon successful credential verification."""
     if redis_client:
         try:
             redis_client.delete(f"auth:failed:{identifier}")
@@ -177,7 +246,15 @@ def clear_login_failures(identifier):
             pass
 
 
+# ---------------------------------------------------------------------------
+# 4. Authentication Middleware & Context Injection
+# ---------------------------------------------------------------------------
+
 def current_user():
+    """
+    Extracts and verifies the Bearer access token from HTTP Authorization header.
+    Returns the user dict if valid and unexpired; returns None otherwise.
+    """
     header = request.headers.get("Authorization", "")
     if not header.startswith("Bearer "):
         return None
@@ -199,13 +276,22 @@ def current_user():
 
 
 def require_user():
+    """
+    Guard function for protected routes. Returns (user, None) if authenticated,
+    or (None, (error_json, 401)) if unauthorized.
+    """
     user = current_user()
     if not user:
         return None, (jsonify({"error": "Authentication required"}), 401)
     return user, None
 
 
+# ---------------------------------------------------------------------------
+# 5. Security Auditing, User Settings & Helper Utilities
+# ---------------------------------------------------------------------------
+
 def audit(connection, user_id, action, entity_type, entity_id=None, metadata=None):
+    """Persists an immutable security audit trail entry to the database."""
     connection.execute(
         """INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
            VALUES (%s, %s, %s, %s, %s)""",
@@ -214,6 +300,7 @@ def audit(connection, user_id, action, entity_type, entity_id=None, metadata=Non
 
 
 def ensure_settings(connection, user_id):
+    """Ensures a corresponding user_settings row exists for the given user_id."""
     connection.execute(
         "INSERT INTO user_settings (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING",
         (user_id,),
@@ -221,12 +308,16 @@ def ensure_settings(connection, user_id):
 
 
 def calculate_security_score(checks):
+    """Computes an overall security posture score (0% to 100%) based on active safeguards."""
     if not checks:
         return 0
     return round(sum(bool(value) for value in checks.values()) / len(checks) * 100)
 
 
 def dispatch_verification_challenge(user, purpose, status_code=200):
+    """
+    Sends an SMS verification code (or challenge token) to complete phone verification or 2FA.
+    """
     try:
         send_verification(user["phone"])
     except RuntimeError as error:
@@ -240,6 +331,7 @@ def dispatch_verification_challenge(user, purpose, status_code=200):
 
 
 def update_user_settings(connection, user_id, settings_dict):
+    """Executes a parameterized batch UPDATE on the user_settings table."""
     ensure_settings(connection, user_id)
     if not settings_dict:
         return
@@ -248,39 +340,111 @@ def update_user_settings(connection, user_id, settings_dict):
     connection.execute(query, list(settings_dict.values()) + [user_id])
 
 
+# ---------------------------------------------------------------------------
+# 6. Transaction Processing & Risk Evaluation Utilities
+# ---------------------------------------------------------------------------
+
+# Optimized query joining transactions with latest lateral fraud prediction and originating device
 TRANSACTION_BASE_QUERY = """
-    SELECT t.*, COALESCE(fp.risk_score, 0) risk_score,
-           CASE WHEN fp.decision IN ('REVIEW', 'BLOCKED') THEN 'REVIEW' ELSE 'SAFE' END status,
-           d.device_name device
+    SELECT
+        t.id,
+        t.user_id,
+        t.reference,
+        t.amount,
+        t.direction,
+        t.currency,
+        t.recipient_phone,
+        t.transaction_type,
+        t.location,
+        t.device_id,
+        t.occurred_at,
+        t.created_at,
+
+        fp.id AS prediction_id,
+        fp.model_name,
+        fp.model_version,
+        fp.fraud_probability,
+        fp.risk_score,
+        fp.risk_level,
+        fp.decision,
+        fp.reasons
+
     FROM transactions t
-    LEFT JOIN LATERAL (SELECT * FROM fraud_predictions WHERE transaction_id = t.id ORDER BY created_at DESC LIMIT 1) fp ON TRUE
-    LEFT JOIN devices d ON d.id = t.device_id
+
+    LEFT JOIN LATERAL (
+        SELECT *
+        FROM fraud_predictions
+        WHERE transaction_id = t.id
+        ORDER BY created_at DESC
+        LIMIT 1
+    ) fp ON TRUE
 """
 
 
 def assess_fraud(payload):
+    """Passes transaction payload to the trained ML model inference engine."""
     return assess_trained_fraud(payload)
 
 
 def transaction_payload(row):
-    item = dict(row)
-    amount = float(item["amount"])
-    if item.get("direction") == "OUT":
-        amount = -amount
-    return {
-        "id": str(item.get("id", item.get("reference"))),
-        "merchant": item.get("merchant") or item.get("transaction_type") or "Transaction",
-        "recipient": item.get("recipient") or item.get("recipient_phone") or "Unknown recipient",
-        "amount": amount,
-        "currency": str(item.get("currency", "GHS")).strip(),
-        "status": item.get("status", "SAFE"),
-        "risk_score": int(item.get("risk_score", 0) or 0),
-        "occurred_at": item["occurred_at"].isoformat() if hasattr(item.get("occurred_at"), "isoformat") else item.get("occurred_at"),
-        "location": item.get("location") or "Unknown",
-        "device": item.get("device") or "Unknown device",
-        "transaction_type": item.get("transaction_type") or "Money transfer",
+    decision = row.get("decision") or "PENDING"
+
+    status_mapping = {
+        "ALLOWED": "SAFE",
+        "REVIEW": "REVIEW",
+        "BLOCKED": "BLOCKED",
+        "PENDING": "PENDING",
     }
 
+    occurred_at = row["occurred_at"]
+
+    return {
+        "id": str(row["id"]),
+        "reference": row["reference"],
+        "amount": float(row["amount"]),
+        "direction": row["direction"],
+        "currency": row["currency"],
+        "recipient": row["recipient_phone"],
+        "transaction_type": row["transaction_type"],
+        "merchant": row["transaction_type"],
+        "location": row["location"],
+
+        "occurred_at": (
+            occurred_at.isoformat()
+            if hasattr(occurred_at, "isoformat")
+            else str(occurred_at)
+        ),
+
+        "fraud_probability": (
+            float(row["fraud_probability"])
+            if row.get("fraud_probability") is not None
+            else None
+        ),
+
+        "risk_score": (
+            int(row["risk_score"])
+            if row.get("risk_score") is not None
+            else None
+        ),
+
+        "risk_level": row.get("risk_level") or "UNKNOWN",
+
+        "decision": decision,
+
+        "status": status_mapping.get(decision, decision),
+
+        "model_name": row.get("model_name"),
+        "model_version": row.get("model_version"),
+
+        "reasons": row.get("reasons") or [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# 7. HTTP API Route Handlers
+# ---------------------------------------------------------------------------
+
+# --- System Health & Telemetry Routes ---
 
 @app.get("/api/health")
 def health():
@@ -541,13 +705,25 @@ def create_transaction():
     if amount <= 0 or direction not in {"IN", "OUT"} or not transaction_type:
         return jsonify({"error": "Enter a positive amount, valid direction, and transaction type"}), 400
     try:
-        assessment = assess_fraud(payload | {"amount": amount})
+        assessment = assess_fraud({
+            **payload,
+            "amount": amount,
+            "type": payload.get("type") or transaction_type,
+        })
     except FraudModelUnavailable as error:
         return jsonify({"error": str(error)}), 503
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    
     reference = str(payload.get("reference", "")).strip() or f"TXN-{uuid.uuid4().hex[:16].upper()}"
     occurred_at = payload.get("occurred_at") or datetime.now(timezone.utc)
     try:
         with database_connection() as connection:
+            logger.info(
+                "Active database backend",
+                extra={"database_backend": database_backend()},
+            )
+
             transaction = connection.execute(
                 """INSERT INTO transactions (user_id, reference, amount, direction, currency,
                    recipient_phone, transaction_type, location, device_id, occurred_at)
@@ -568,10 +744,44 @@ def create_transaction():
                     "INSERT INTO fraud_alerts (transaction_id, prediction_id, severity) VALUES (%s, %s, %s)",
                     (transaction["id"], prediction["id"], "CRITICAL" if assessment["risk_level"] == "CRITICAL" else "HIGH"),
                 )
-            audit(connection, user["id"], "TRANSACTION_CREATED", "transaction", transaction["id"], {"reference": reference})
+            audit(
+                connection, user["id"], 
+                "TRANSACTION_CREATED", 
+                "transaction", 
+                transaction["id"], 
+                {"reference": reference})
+            saved_transaction = connection.execute(
+                f"{TRANSACTION_BASE_QUERY} WHERE t.id = %s",
+                (transaction["id"],),
+            ).fetchone()
+
+            logger.info(
+                "Transaction retrieval diagnostic",
+                extra={
+                    "inserted_transaction_id": str(transaction["id"]),
+                    "retrieved_transaction": saved_transaction is not None,
+                    "inserted_user_id": str(user["id"]),
+                },
+            )
+
+
+            if saved_transaction is None:
+                logger.error(
+                    "Transaction could not be retrieved after insertion",
+                    extra={
+                        "transaction_id": str(transaction["id"]),
+                        "user_id": str(user["id"]),
+                    },
+                )
+                raise RuntimeError(
+                    "Transaction was inserted but could not be retrieved."
+                )            
     except UniqueViolation:
         return jsonify({"error": "That transaction reference already exists"}), 409
-    return jsonify({"transaction": transaction_payload(transaction), "assessment": assessment}), 201
+    return jsonify({
+        "transaction": transaction_payload(saved_transaction),
+        "assessment": assessment
+    }), 201
 
 
 @app.get("/api/transactions/<transaction_id>")
@@ -817,4 +1027,8 @@ def assistant():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=os.getenv("FLASK_DEBUG", "false").lower() == "true")
+    app.run(
+        host="127.0.0.1",
+        port=int(os.getenv("PORT", "5000")),
+        debug=os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    )

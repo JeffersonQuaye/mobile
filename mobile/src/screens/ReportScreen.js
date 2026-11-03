@@ -1,9 +1,28 @@
+/**
+ * MoMoGuard Fraud Incident Report Screen
+ * ----------------------------------------
+ * Allows users to submit an official encrypted fraud report to the backend,
+ * which is then reviewed by the MoMoGuard security team.
+ *
+ * Flow:
+ * 1. If navigation was triggered from TransactionDetailScreen, the disputed
+ *    transaction is pre-attached to the report via `route.params.transaction`.
+ * 2. The user selects a fraud category, writes a description, and optionally
+ *    provides a contact phone number.
+ * 3. On submit, the report is sent to POST /api/reports. A case reference ID
+ *    is returned and the screen transitions to a success confirmation view.
+ *
+ * Validation Rules:
+ * - Category: required (pre-selected to UNAUTHORIZED_TRANSACTION by default).
+ * - Description: minimum 15 characters of meaningful detail.
+ * - Phone: must match the Ghanaian mobile-money number format if provided.
+ *
+ * Offline Handling:
+ * - Submission is blocked when offline; an OfflineBanner notifies the user.
+ */
+
 import React, { useState } from "react";
-import {
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { reportsService } from "../services/api";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -55,28 +74,45 @@ const FRAUD_CATEGORIES = [
 ];
 
 export default function ReportScreen({ route, navigation }) {
+  // Pull JWT token and user object from auth context
   const { token, user } = useAuth();
+  // True when the device has an active internet connection
   const isOnline = useNetworkStatus();
+  // Optional linked transaction passed from TransactionDetailScreen
   const transaction = route.params?.transaction;
 
+  // Currently selected fraud category (defaults to the most common type)
   const [category, setCategory] = useState("UNAUTHORIZED_TRANSACTION");
+  // Free-text description of the incident
   const [description, setDescription] = useState("");
+  // Contact phone number pre-filled from the user's registered phone
   const [phoneNumber, setPhoneNumber] = useState(user?.phone || "");
+  // Per-field validation error messages keyed by field name
   const [fieldErrors, setFieldErrors] = useState({});
+  // Top-level error shown on network failure or offline submission attempt
   const [generalError, setGeneralError] = useState("");
+  // True while the API request is in flight
   const [busy, setBusy] = useState(false);
+  // When non-null, holds the confirmed report object and switches to the success view
   const [submittedReport, setSubmittedReport] = useState(null);
 
+  /**
+   * Client-side validation before sending to the API.
+   * Returns true if all fields are valid; false otherwise.
+   * Populates `fieldErrors` so inline messages appear beneath each input.
+   */
   function validateReport() {
     const errors = {};
     if (!category) {
       errors.category = "Please choose a fraud category.";
     }
     const cleanDesc = description.trim();
+    // Enforce a minimum character count so reports contain actionable detail
     if (!cleanDesc || cleanDesc.length < 15) {
       errors.description =
         "Please provide more detail (minimum 15 characters). Explain what happened.";
     }
+    // Phone is optional but must be a valid GH mobile-money number if supplied
     if (phoneNumber.trim() && !isValidGhanaPhone(phoneNumber)) {
       errors.phone = "Please enter a valid Ghana phone number.";
     }
@@ -84,19 +120,28 @@ export default function ReportScreen({ route, navigation }) {
     return Object.keys(errors).length === 0;
   }
 
+  /**
+   * Handles form submission. Validates inputs, then POSTs the report to the
+   * backend. On success, stores the returned report object which triggers the
+   * success-confirmation UI branch.
+   */
   async function handleSubmit() {
     setGeneralError("");
+    // Block submission when offline — reports cannot be queued for later
     if (!isOnline) {
       setGeneralError(
         "You are currently offline. Please connect to the internet to submit your fraud report.",
       );
       return;
     }
-    if (!validateReport()) return;
+    if (!validateReport()) return; // Abort if client-side validation fails
 
     setBusy(true);
     try {
+      // Strip spaces/dashes from phone before embedding in the description
       const cleanPhone = normalizePhone(phoneNumber);
+      // Append contact phone inline to description so it's stored even if the
+      // phone field isn't a top-level report field in the API schema.
       const fullDescription = cleanPhone
         ? `${description.trim()}\n[Contact phone: ${cleanPhone}]`
         : description.trim();
@@ -105,16 +150,15 @@ export default function ReportScreen({ route, navigation }) {
         {
           category,
           description: fullDescription,
-          transaction_id: transaction?.id || null,
+          transaction_id: transaction?.id || null, // Link to disputed transaction if available
         },
         token,
       );
 
+      // Switch screen to success view with the returned report data
       setSubmittedReport(response);
     } catch (err) {
-      setGeneralError(
-        err.message || "Failed to submit fraud report. Please try again.",
-      );
+      setGeneralError(err.message || "Failed to submit fraud report. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -142,9 +186,7 @@ export default function ReportScreen({ route, navigation }) {
           >
             <Text style={{ fontSize: 28, color: colors.green }}>✓</Text>
           </View>
-          <Text style={[styles.title, { textAlign: "center" }]}>
-            Report Lodged
-          </Text>
+          <Text style={[styles.title, { textAlign: "center" }]}>Report Lodged</Text>
           <Text style={[styles.subtitle, { textAlign: "center" }]}>
             Your incident has been securely registered in the MoMoGuard security vault.
           </Text>
@@ -196,9 +238,9 @@ export default function ReportScreen({ route, navigation }) {
           </Text>
           <Text style={[styles.muted, { marginTop: 6, lineHeight: 22 }]}>
             1. Call your mobile operator fraud line right now:
-            {"\n"}   • MTN MoMo: 100 or 0244300000
-            {"\n"}   • Telecel Cash: 100
-            {"\n"}   • AT Money: 100
+            {"\n"} • MTN MoMo: 100 or 0244300000
+            {"\n"} • Telecel Cash: 100
+            {"\n"} • AT Money: 100
             {"\n"}2. Request a temporary wallet freeze if your PIN was exposed.
             {"\n"}3. Save all SMS messages received as legal evidence.
           </Text>
@@ -233,9 +275,7 @@ export default function ReportScreen({ route, navigation }) {
           minHeight: 44,
         }}
       >
-        <Text style={{ color: colors.accent, fontSize: 18, marginRight: 6 }}>
-          ←
-        </Text>
+        <Text style={{ color: colors.accent, fontSize: 18, marginRight: 6 }}>←</Text>
         <Text style={{ color: colors.accent, fontWeight: "700", fontSize: 14 }}>
           Cancel and go back
         </Text>
@@ -300,12 +340,7 @@ export default function ReportScreen({ route, navigation }) {
               <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                 <Text style={{ fontSize: 22 }}>{cat.icon}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.cardTitle,
-                      selected && { color: colors.accent },
-                    ]}
-                  >
+                  <Text style={[styles.cardTitle, selected && { color: colors.accent }]}>
                     {cat.label}
                   </Text>
                   <Text style={styles.mutedSmall}>{cat.description}</Text>

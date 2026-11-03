@@ -87,17 +87,38 @@ function transpileDirectory(srcFolder, destFolder) {
 
       // Replace native library imports with local mocks
       code = code
-        .replace(/from "react-native"/g, `from "${path.join(distDir, "mock-react-native.js").replace(/\\/g, "/")}"`)
-        .replace(/from '@react-native-async-storage\/async-storage'/g, `from "${path.join(distDir, "mock-storage.js").replace(/\\/g, "/")}"`)
-        .replace(/from "@react-native-async-storage\/async-storage"/g, `from "${path.join(distDir, "mock-storage.js").replace(/\\/g, "/")}"`)
-        .replace(/from "expo-secure-store"/g, `from "${path.join(distDir, "mock-storage.js").replace(/\\/g, "/")}"`)
-        .replace(/from "@react-native-community\/netinfo"/g, `from "${path.join(distDir, "mock-react-native.js").replace(/\\/g, "/")}"`);
+        .replace(
+          /from "react-native"/g,
+          `from "${path.join(distDir, "mock-react-native.js").replace(/\\/g, "/")}"`,
+        )
+        .replace(
+          /from '@react-native-async-storage\/async-storage'/g,
+          `from "${path.join(distDir, "mock-storage.js").replace(/\\/g, "/")}"`,
+        )
+        .replace(
+          /from "@react-native-async-storage\/async-storage"/g,
+          `from "${path.join(distDir, "mock-storage.js").replace(/\\/g, "/")}"`,
+        )
+        .replace(
+          /from "expo-secure-store"/g,
+          `from "${path.join(distDir, "mock-storage.js").replace(/\\/g, "/")}"`,
+        )
+        .replace(
+          /from "@react-native-community\/netinfo"/g,
+          `from "${path.join(distDir, "mock-react-native.js").replace(/\\/g, "/")}"`,
+        );
 
       // If mock-storage was imported, map default import
       if (code.includes("mock-storage")) {
         code = code
-          .replace(/import AsyncStorage from/g, "import { mockAsyncStorage as AsyncStorage } from")
-          .replace(/import \* as SecureStore from/g, "import { mockSecureStore as SecureStore } from");
+          .replace(
+            /import AsyncStorage from/g,
+            "import { mockAsyncStorage as AsyncStorage } from",
+          )
+          .replace(
+            /import \* as SecureStore from/g,
+            "import { mockSecureStore as SecureStore } from",
+          );
       }
 
       const transformed = babel.transformSync(code, {

@@ -1,55 +1,83 @@
+/**
+ * MoMoGuard Profile & Settings Screen
+ * -------------------------------------
+ * Central hub for user identity, environment configuration, and session control.
+ *
+ * Sections:
+ * 1. User Information Card: Displays the authenticated user's name, email, phone,
+ *    and a verified account badge.
+ * 2. Environment Configuration: Allows switching between Development, Staging, and
+ *    Production API backends at runtime without an app rebuild (useful for QA / demos).
+ * 3. Push Notifications Testing: Shows the Expo push token and lets devs fire a
+ *    simulated security alert to verify the full notification pipeline.
+ * 4. Session Security / Sign Out: Prompts via Alert (native) or confirm (web) before
+ *    clearing the session token from secure storage and returning to AuthScreen.
+ */
+
 import React, { useState } from "react";
-import {
-  Alert,
-  Platform,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Platform, Pressable, Text, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { ENVIRONMENTS, getConfig } from "../config/env";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { colors, styles } from "../theme";
-import {
-  Button,
-  Card,
-  Header,
-  Screen,
-  StatusBadge,
-} from "../components/UI";
+import { Button, Card, Header, Screen, StatusBadge } from "../components/UI";
 
 export default function ProfileScreen() {
+  // Destructure auth context to get current user data and session management helpers
   const { user, token, logout, switchEnvironment } = useAuth();
+  // Hook for Expo push notifications; provides the device push token and a helper to send test alerts
   const { sendTestAlert, pushToken } = usePushNotifications(token);
+  // Track the active environment config (name, apiBaseUrl, badgeColor) for the UI badge
   const [activeConfig, setActiveConfig] = useState(getConfig());
+  // Controls the temporary success state on the test-notification button
   const [testNotificationSent, setTestNotificationSent] = useState(false);
 
+  /**
+   * Switches the active API environment (DEV / STAGING / PROD), persists the
+   * choice via AuthContext, and refreshes the local config display state.
+   *
+   * @param {string} envKey - One of the ENVIRONMENTS constant values.
+   */
   async function handleEnvSwitch(envKey) {
     await switchEnvironment(envKey);
+    // Re-read config from env.js after the context updates AsyncStorage
     const updated = getConfig();
     setActiveConfig(updated);
   }
 
+  /**
+   * Fires a simulated MoMo security alert push notification.
+   * The data payload includes `screen: "Alerts"` so tapping the notification
+   * deep-links the user directly to the Alerts tab.
+   * On success, temporarily shows a confirmation label for 5 seconds.
+   */
   async function handleSendTestPush() {
     try {
       await sendTestAlert(
         "🚨 High-Risk Transaction Alert",
         "A withdrawal of GHS 1,200.00 from Accra New Town was flagged by AI.",
-        { screen: "Alerts" },
+        { screen: "Alerts" }, // Deep-link payload used by the notification handler
       );
       setTestNotificationSent(true);
+      // Reset the button label after 5 seconds
       setTimeout(() => setTestNotificationSent(false), 5000);
     } catch (err) {
       console.warn("Failed to trigger test notification:", err);
     }
   }
 
+  /**
+   * Prompts the user to confirm sign-out before clearing the session.
+   * Uses a native Alert dialog on mobile and window.confirm on web.
+   */
   function handleLogoutPrompt() {
     if (Platform.OS === "web") {
+      // window.confirm is synchronous on web — no native Alert available
       if (confirm("Are you sure you want to sign out of MoMoGuard?")) {
         logout();
       }
     } else {
+      // Native iOS/Android destructive-action sheet pattern
       Alert.alert(
         "Sign Out",
         "Are you sure you want to end your secure MoMoGuard session?",
@@ -138,12 +166,7 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            <Text
-              style={[
-                styles.badgeText,
-                { color: activeConfig.badgeColor },
-              ]}
-            >
+            <Text style={[styles.badgeText, { color: activeConfig.badgeColor }]}>
               {activeConfig.name}
             </Text>
           </View>
@@ -171,12 +194,7 @@ export default function ProfileScreen() {
                   isSelected && styles.filterActive,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.filterText,
-                    isSelected && styles.filterTextActive,
-                  ]}
-                >
+                <Text style={[styles.filterText, isSelected && styles.filterTextActive]}>
                   {value}
                 </Text>
               </Pressable>

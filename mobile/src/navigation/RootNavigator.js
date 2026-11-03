@@ -1,3 +1,17 @@
+/**
+ * MoMoGuard Root Navigator
+ * -------------------------
+ * Top-level native stack navigator controlling top-tier navigation flow:
+ *
+ * 1. Bootstrapping Splash Screen: Renders a branded loading indicator while restoring
+ *    the encrypted user session from SecureStore.
+ * 2. Unauthenticated Flow: Displays `AuthScreen` (Sign In, Register, Phone Verification, 2FA).
+ * 3. Authenticated Flow: Renders `MainTabNavigator` alongside modal and detail screens:
+ *    - `TransactionDetail`: Slide-in card view showing deep transaction metrics & AI signals.
+ *    - `Report`: Bottom-sheet modal for filing official mobile-money fraud reports.
+ * 4. Push Notification Deep Linking: Redirects user directly to flagged transactions or alerts.
+ */
+
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ActivityIndicator, Text, View } from "react-native";
@@ -26,6 +40,7 @@ export default function RootNavigator({ navigationRef }) {
     }
   });
 
+  // Render branded loading state during session restoration
   if (loading) {
     return (
       <View
@@ -49,17 +64,12 @@ export default function RootNavigator({ navigationRef }) {
           ✦
         </Text>
         <Text
-          style={[
-            styles.title,
-            { fontSize: 26, marginBottom: 8, textAlign: "center" },
-          ]}
+          style={[styles.title, { fontSize: 26, marginBottom: 8, textAlign: "center" }]}
         >
           MoMoGuard
         </Text>
         <ActivityIndicator color={colors.accent} size="large" />
-        <Text style={[styles.muted, { marginTop: 16 }]}>
-          Restoring secure session...
-        </Text>
+        <Text style={[styles.muted, { marginTop: 16 }]}>Restoring secure session...</Text>
       </View>
     );
   }
@@ -73,8 +83,10 @@ export default function RootNavigator({ navigationRef }) {
       }}
     >
       {!isAuthenticated ? (
+        // Unauthenticated Stack
         <Stack.Screen name="Auth" component={AuthScreen} />
       ) : (
+        // Authenticated Stack
         <>
           <Stack.Screen name="MainTabs" component={MainTabNavigator} />
           <Stack.Screen

@@ -1,11 +1,18 @@
+/**
+ * MoMoGuard Security Settings & Safeguards Screen
+ * ------------------------------------------------
+ * Allows users to review and configure active account safeguards:
+ *
+ * Controls & Features:
+ * 1. Security Posture Meter: Displays dynamic security score calculated from enabled defenses.
+ * 2. Two-Factor Authentication (2FA): Toggles mandatory SMS challenge for all outgoing transfers.
+ * 3. AI Monitoring Engine: Activates real-time anomaly detection across transaction streams.
+ * 4. Immediate SMS & Push Alerts: Configures notification channels for instant threat notifications.
+ * 5. Optimistic UI Updates: Instantly reflects switch states with rollback on API failure.
+ */
+
 import React, { useEffect, useState } from "react";
-import {
-  Alert,
-  Platform,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Platform, Switch, Text, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { securityService } from "../services/api";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -55,7 +62,9 @@ export default function SecurityScreen() {
   async function handleToggle(key, value) {
     if (!isOnline) {
       if (Platform.OS === "web") {
-        window.alert("You need an internet connection to update security configurations.");
+        window.alert(
+          "You need an internet connection to update security configurations.",
+        );
       } else {
         Alert.alert(
           "Offline",
@@ -119,11 +128,7 @@ export default function SecurityScreen() {
   ];
 
   return (
-    <Screen
-      scrollable
-      onRefresh={() => load(true)}
-      refreshing={refreshing}
-    >
+    <Screen scrollable onRefresh={() => load(true)} refreshing={refreshing}>
       {!isOnline && (
         <OfflineBanner message="Offline: Security changes require an active connection." />
       )}
@@ -161,9 +166,7 @@ export default function SecurityScreen() {
 
       {/* Controls card */}
       <Card>
-        <Text style={[styles.cardTitle, { marginBottom: 10 }]}>
-          Protection Layers
-        </Text>
+        <Text style={[styles.cardTitle, { marginBottom: 10 }]}>Protection Layers</Text>
 
         {securitySettings.map((item, idx) => {
           const isChecked = Boolean(checks[item.key]);
@@ -203,9 +206,12 @@ export default function SecurityScreen() {
       <Card>
         <Text style={styles.cardTitle}>🔒 Ghana MoMo Safety Rules</Text>
         <Text style={[styles.muted, { marginTop: 8, lineHeight: 22 }]}>
-          • Never reveal your PIN to anyone, even callers claiming to be from your network.
-          {"\n"}• Always check the recipient name on your phone before approving a transfer.
-          {"\n"}• Beware of fake SMS notifications claiming you won a prize or money was sent by mistake.
+          • Never reveal your PIN to anyone, even callers claiming to be from your
+          network.
+          {"\n"}• Always check the recipient name on your phone before approving a
+          transfer.
+          {"\n"}• Beware of fake SMS notifications claiming you won a prize or money was
+          sent by mistake.
         </Text>
       </Card>
     </Screen>

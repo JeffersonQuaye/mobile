@@ -1,3 +1,16 @@
+/**
+ * MoMoGuard Authentication Screen
+ * --------------------------------
+ * Handles the complete user onboarding and login experience:
+ *
+ * Capabilities:
+ * 1. Mode Switching: Toggle between "Sign In" and "Create Account".
+ * 2. Form Validation: Validates email, password complexity (8+ chars), and Ghanaian phone numbers.
+ * 3. Challenge Step (2FA / Phone Verification): Dynamically presents OTP challenge when
+ *    phone verification or two-factor authentication is required by policy.
+ * 4. Error Handling: Provides both field-level error indicators and general server error alerts.
+ */
+
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -11,11 +24,7 @@ import { authService } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { colors, styles } from "../theme";
 import { Button, Field, FormError, Header } from "../components/UI";
-import {
-  isValidEmail,
-  isValidGhanaPhone,
-  normalizePhone,
-} from "../utils/validators";
+import { isValidEmail, isValidGhanaPhone, normalizePhone } from "../utils/validators";
 
 export default function AuthScreen() {
   const { login } = useAuth();
@@ -136,11 +145,7 @@ export default function AuthScreen() {
         setChallenge({ purpose: "2fa", token: result.challenge_token });
         update("code", "");
       } else {
-        await login(
-          result.user || pendingUser,
-          result.token,
-          result.refresh_token,
-        );
+        await login(result.user || pendingUser, result.token, result.refresh_token);
       }
     } catch (requestError) {
       setGeneralError(requestError.message || "Verification code failed.");
@@ -191,7 +196,9 @@ export default function AuthScreen() {
               label="6-Digit Verification Code"
               placeholder="e.g. 123456"
               value={form.code}
-              onChangeText={(val) => update("code", val.replace(/[^0-9]/g, "").slice(0, 6))}
+              onChangeText={(val) =>
+                update("code", val.replace(/[^0-9]/g, "").slice(0, 6))
+              }
               keyboardType="number-pad"
               maxLength={6}
               error={fieldErrors.code}
@@ -215,7 +222,12 @@ export default function AuthScreen() {
                 setGeneralError("");
                 setFieldErrors({});
               }}
-              style={{ marginTop: 20, alignSelf: "center", minHeight: 44, justifyContent: "center" }}
+              style={{
+                marginTop: 20,
+                alignSelf: "center",
+                minHeight: 44,
+                justifyContent: "center",
+              }}
             >
               <Text style={{ color: colors.accent, fontWeight: "700" }}>
                 ← Return to Sign In
@@ -223,7 +235,10 @@ export default function AuthScreen() {
             </Pressable>
           </View>
         ) : (
-          <View accessibilityRole="region" accessibilityLabel="Sign in or registration form">
+          <View
+            accessibilityRole="region"
+            accessibilityLabel="Sign in or registration form"
+          >
             <Header
               eyebrow={registering ? "NEW ACCOUNT" : "SECURE LOGIN"}
               title={registering ? "Protect your mobile money" : "Welcome back"}
@@ -285,9 +300,7 @@ export default function AuthScreen() {
               disabled={busy}
               onPress={handleSubmit}
               accessibilityHint={
-                registering
-                  ? "Submits registration form"
-                  : "Signs into your account"
+                registering ? "Submits registration form" : "Signs into your account"
               }
             >
               {busy
@@ -300,9 +313,7 @@ export default function AuthScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
-                registering
-                  ? "Switch to sign in"
-                  : "Switch to create account"
+                registering ? "Switch to sign in" : "Switch to create account"
               }
               onPress={() => {
                 setRegistering((prev) => !prev);
@@ -317,7 +328,9 @@ export default function AuthScreen() {
                 paddingHorizontal: 12,
               }}
             >
-              <Text style={{ color: colors.accent, fontWeight: "700", textAlign: "center" }}>
+              <Text
+                style={{ color: colors.accent, fontWeight: "700", textAlign: "center" }}
+              >
                 {registering
                   ? "Already have an account? Sign In"
                   : "New to MoMoGuard? Create an Account"}

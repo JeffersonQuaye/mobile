@@ -1,9 +1,18 @@
+/**
+ * MoMoGuard Home Dashboard Screen
+ * --------------------------------
+ * Central overview screen for the authenticated user:
+ *
+ * Visual Features:
+ * 1. Wallet Balance Card: Displays total balance, net income, and total spending with currency formatting.
+ * 2. Real-Time Security Health Meter: Renders `RiskMeter` showing overall account posture score (0 - 100%).
+ * 3. Recent Activity Stream: Displays the latest 3 transactions with quick navigation to detail views.
+ * 4. Active Threat Warnings: Surfaces unacknowledged fraud alerts and recommended security actions.
+ * 5. Offline Resilience: Automatically shows cached dashboard metrics if the device loses connection.
+ */
+
 import React from "react";
-import {
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../hooks/useApi";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -36,9 +45,7 @@ export default function HomeScreen({ navigation }) {
     refresh,
   } = useApi("/dashboard", token);
 
-  const {
-    data: txData,
-  } = useApi("/transactions", token);
+  const { data: txData } = useApi("/transactions", token);
 
   const firstName = getFirstName(user?.full_name);
 
@@ -74,11 +81,7 @@ export default function HomeScreen({ navigation }) {
   const recentTransactions = (txData?.items || []).slice(0, 3);
 
   return (
-    <Screen
-      scrollable
-      onRefresh={refresh}
-      refreshing={refreshing}
-    >
+    <Screen scrollable onRefresh={refresh} refreshing={refreshing}>
       {(!isOnline || isOffline) && (
         <OfflineBanner
           message={

@@ -1,9 +1,17 @@
+/**
+ * MoMoGuard Transaction Detail Screen
+ * ------------------------------------
+ * Shows detailed breakdown, metadata, and security telemetry for a specific transaction:
+ *
+ * Detailed Breakdown:
+ * 1. Financial Metrics: Direction, amount, currency, recipient phone, merchant classification.
+ * 2. Originating Device Telemetry: Hardware device name, approximate location, and timestamp.
+ * 3. AI Risk Score Gauge: Visual risk meter highlighting predicted fraud probability.
+ * 4. Fraud Incident Launcher: Action button enabling immediate reporting to telecom security teams.
+ */
+
 import React, { useEffect, useState } from "react";
-import {
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { transactionsService } from "../services/api";
 import { colors, styles } from "../theme";
@@ -100,11 +108,7 @@ export default function TransactionDetailScreen({ route, navigation }) {
   const formattedDate = formatDateTime(transaction.occurred_at);
 
   return (
-    <Screen
-      scrollable
-      onRefresh={() => loadDetail(true)}
-      refreshing={refreshing}
-    >
+    <Screen scrollable onRefresh={() => loadDetail(true)} refreshing={refreshing}>
       {/* Top back navigation button */}
       <Pressable
         accessibilityRole="button"
@@ -117,9 +121,7 @@ export default function TransactionDetailScreen({ route, navigation }) {
           minHeight: 44,
         }}
       >
-        <Text style={{ color: colors.accent, fontSize: 18, marginRight: 6 }}>
-          ←
-        </Text>
+        <Text style={{ color: colors.accent, fontSize: 18, marginRight: 6 }}>←</Text>
         <Text style={{ color: colors.accent, fontWeight: "700", fontSize: 14 }}>
           Back to list
         </Text>
@@ -178,7 +180,8 @@ export default function TransactionDetailScreen({ route, navigation }) {
               ⚠️ AI Security Warning
             </Text>
             <Text style={[styles.mutedSmall, { color: colors.amber, marginTop: 4 }]}>
-              This transaction exhibits behavioral anomalies or recipient risk. If you did not authorize this, file a report immediately.
+              This transaction exhibits behavioral anomalies or recipient risk. If you did
+              not authorize this, file a report immediately.
             </Text>
           </View>
         ) : null}
@@ -186,9 +189,7 @@ export default function TransactionDetailScreen({ route, navigation }) {
 
       {/* Transaction Metadata Breakdown */}
       <Card>
-        <Text style={[styles.cardTitle, { marginBottom: 14 }]}>
-          Audit Information
-        </Text>
+        <Text style={[styles.cardTitle, { marginBottom: 14 }]}>Audit Information</Text>
 
         {[
           ["Reference ID", transaction.id || "N/A"],

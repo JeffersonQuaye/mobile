@@ -1,3 +1,17 @@
+/**
+ * MoMoGuard Resilient API Fetching Hook (`useApi`)
+ * ------------------------------------------------
+ * A custom React hook that wraps asynchronous API calls with caching, retry, and offline fallback.
+ *
+ * Capabilities:
+ * 1. Automatic SWR Caching: Caches successful GET responses in persistent storage (`setCache`).
+ * 2. Offline Resilience: On network failures (HTTP 0 or socket timeout), transparently serves
+ *    stale-while-revalidate cached data and sets `isOffline` and `isCached` flags.
+ * 3. Pull-to-Refresh & Manual Retry: Provides a `refresh()` callback that preserves existing
+ *    screen content while revalidating data in the background.
+ * 4. Stale Reference Protection: Uses `useRef` to stabilize option objects and avoid infinite render loops.
+ */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../services/api";
 import { getCache, setCache } from "../services/storage";

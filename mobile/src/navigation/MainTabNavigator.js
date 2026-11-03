@@ -1,3 +1,17 @@
+/**
+ * MoMoGuard Main Tab Navigator
+ * ----------------------------
+ * Primary bottom navigation bar providing instant switching between core application views:
+ *
+ * Tabs:
+ * - Home (Dashboard): Live wallet balance, transaction summary, active security cards.
+ * - Transactions: Filterable ledger with incoming/outgoing categorization.
+ * - Alerts: Flagged transfers, high-risk warnings, and incident resolution.
+ * - Security: Two-factor authentication, biometric registration, and AI monitoring controls.
+ * - Assistant: Conversational AI security advisor and scam protection chatbot.
+ * - Profile: Account credentials, notifications, and environment switcher.
+ */
+
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Platform, Text, View } from "react-native";

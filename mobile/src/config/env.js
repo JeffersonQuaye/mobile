@@ -1,3 +1,15 @@
+/**
+ * MoMoGuard Multi-Environment Configuration
+ * ------------------------------------------
+ * Manages runtime endpoint configuration across development, staging, and production tiers.
+ *
+ * Capabilities:
+ * 1. Automatic host discovery: Differentiates between web (localhost), Android emulator (10.0.2.2),
+ *    and physical device LAN addresses (EXPO_PUBLIC_API_BASE_URL).
+ * 2. Tiered security & timeouts: Enforces SSL and disables mock logs in production.
+ * 3. Dynamic runtime switching: Supports switching backend environments on-the-fly for testing.
+ */
+
 import { Platform } from "react-native";
 
 export const ENVIRONMENTS = {
@@ -6,17 +18,14 @@ export const ENVIRONMENTS = {
   PRODUCTION: "production",
 };
 
+// Platform-aware local development fallback addresses
 const DEFAULT_DEV_HOST =
-  Platform.OS === "web"
-    ? "http://localhost:5000/api"
-    : "http://10.0.2.2:5000/api";
+  Platform.OS === "web" ? "http://localhost:5000/api" : "http://10.0.2.2:5000/api";
 
 const ENV_CONFIGS = {
   [ENVIRONMENTS.DEVELOPMENT]: {
     name: "Development",
-    apiBaseUrl:
-      process.env.EXPO_PUBLIC_API_BASE_URL ||
-      DEFAULT_DEV_HOST,
+    apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || DEFAULT_DEV_HOST,
     timeoutMs: 12000,
     enableDetailedLogs: true,
     enableMockPushTest: true,
@@ -26,8 +35,7 @@ const ENV_CONFIGS = {
   [ENVIRONMENTS.STAGING]: {
     name: "Staging (Preview)",
     apiBaseUrl:
-      process.env.EXPO_PUBLIC_STAGING_API_URL ||
-      "https://staging-api.momoguard.com/api",
+      process.env.EXPO_PUBLIC_STAGING_API_URL || "https://staging-api.momoguard.com/api",
     timeoutMs: 15000,
     enableDetailedLogs: true,
     enableMockPushTest: true,
@@ -36,9 +44,7 @@ const ENV_CONFIGS = {
   },
   [ENVIRONMENTS.PRODUCTION]: {
     name: "Production",
-    apiBaseUrl:
-      process.env.EXPO_PUBLIC_PROD_API_URL ||
-      "https://api.momoguard.com/api",
+    apiBaseUrl: process.env.EXPO_PUBLIC_PROD_API_URL || "https://api.momoguard.com/api",
     timeoutMs: 10000,
     enableDetailedLogs: false,
     enableMockPushTest: false,

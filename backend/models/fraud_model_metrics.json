@@ -1,18 +1,37 @@
 {
-  "model_name": "momoguard-fraud-logistic-regression",
-  "model_version": "1.0.0",
-  "dataset": "fraud_transactions.csv",
-  "samples": 40,
-  "test_samples": 10,
-  "accuracy": 1.0,
-  "precision": 1.0,
-  "recall": 1.0,
-  "false_positive_rate": 0.0,
-  "false_negative_rate": 0.0,
+  "model_name": "momoguard-histgradientboosting-paysim",
+  "model_version": "2.0.0",
+  "dataset": "PS_20174392719_1491204439457_log.csv",
+  "dataset_type": "synthetic PaySim mobile-money simulation",
+  "sklearn_version": "1.9.1",
+  "features": [
+    "amount",
+    "type"
+  ],
+  "excluded_features": {
+    "step": "PaySim simulation-time feature; no equivalent is supplied by the live API"
+  },
+  "samples": 6362620,
+  "train_samples": 6082021,
+  "validation_samples": 191141,
+  "test_samples": 89458,
+  "training_fraud_count": 5795,
+  "validation_fraud_count": 1174,
+  "test_fraud_count": 1244,
+  "validation_threshold": 0.97,
+  "validation_precision": 0.8206896551724138,
+  "validation_recall": 0.20272572402044292,
+  "validation_f1": 0.3251366120218579,
+  "test_accuracy": 0.9883856111247736,
+  "test_precision": 0.7823691460055097,
+  "test_recall": 0.2282958199356913,
+  "test_f1": 0.35345364032358434,
+  "test_pr_auc": 0.36091303236056854,
+  "test_roc_auc": 0.9173899364283451,
   "confusion_matrix": {
-    "true_negative": 5,
-    "false_positive": 0,
-    "false_negative": 0,
-    "true_positive": 5
+    "true_negative": 88135,
+    "false_positive": 79,
+    "false_negative": 960,
+    "true_positive": 284
   }
 }

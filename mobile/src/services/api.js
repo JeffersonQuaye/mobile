@@ -1,3 +1,16 @@
+/**
+ * MoMoGuard Mobile API Client & Domain Services
+ * ----------------------------------------------
+ * Handles all network communication between the React Native client and the Flask backend.
+ *
+ * Core Features:
+ * 1. AbortController Timeouts: Cancels hanging HTTP requests after environment-specific timeouts.
+ * 2. Automated Token Authorization: Automatically attaches Bearer tokens to request headers.
+ * 3. Offline Error Classification: Maps failed fetches to structured offline errors for UI state banners.
+ * 4. Modular Domain Services: Type-safe endpoint wrappers for auth, transactions, reports, alerts,
+ *    security settings, AI chatbot, and device management.
+ */
+
 import { getApiBaseUrl, getConfig } from "../config/env";
 import { saveSession } from "./storage";
 
@@ -56,7 +69,9 @@ async function request(path, options = {}, token = "") {
       err.message?.includes("Failed to fetch") ||
       err.message?.includes("NetworkError")
     ) {
-      const offlineError = new Error("Unable to connect to server. Please check your internet connection.");
+      const offlineError = new Error(
+        "Unable to connect to server. Please check your internet connection.",
+      );
       offlineError.status = 0;
       offlineError.isOffline = true;
       throw offlineError;
@@ -142,11 +157,7 @@ export const alertsService = {
 export const securityService = {
   get: (token) => request("/security", {}, token),
   update: (settings, token) =>
-    request(
-      "/security",
-      { method: "PUT", body: JSON.stringify(settings) },
-      token,
-    ),
+    request("/security", { method: "PUT", body: JSON.stringify(settings) }, token),
 };
 
 export const assistantService = {

@@ -1,0 +1,28 @@
+{
+    "model_name": "HistGradientBoosting",
+    "model_file": "histgradientboosting.pkl",
+    "threshold_file": "histgradientboosting_threshold.pkl",
+    "type_mapping_file": "histgradientboosting_type_mapping.pkl",
+    "features": [
+        "amount",
+        "type",
+        "step"
+    ],
+    "feature_order": [
+        "amount",
+        "encoded_type",
+        "step"
+    ],
+    "categorical_feature_indices": [
+        1
+    ],
+    "type_mapping": {
+        "CASH_IN": 0,
+        "CASH_OUT": 1,
+        "DEBIT": 2,
+        "PAYMENT": 3,
+        "TRANSFER": 4
+    },
+    "risk_threshold": 0.99,
+    "sklearn_version": "1.9.1"
+}

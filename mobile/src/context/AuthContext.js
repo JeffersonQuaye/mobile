@@ -1,3 +1,16 @@
+/**
+ * MoMoGuard Global Authentication & Session Context
+ * -------------------------------------------------
+ * Manages the client-side authentication lifecycle, secure session persistence,
+ * and background token rotation.
+ *
+ * Responsibilities:
+ * 1. Cold boot session restoration from hardware-backed SecureStore (or AsyncStorage on Web).
+ * 2. Background token refresh timer rotating credentials every 10 minutes.
+ * 3. Centralized login, logout, and user profile update methods.
+ * 4. Context hook `useAuth()` exposing session state, tokens, and active user profile.
+ */
+
 import React, {
   createContext,
   useCallback,

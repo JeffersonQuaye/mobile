@@ -1,3 +1,17 @@
+/**
+ * MoMoGuard Design System & Theme Definitions
+ * --------------------------------------------
+ * This module defines the central design tokens, color palette, and reusable style sheets
+ * for the entire mobile application.
+ *
+ * Color Palette Semantics:
+ * - background / surface / surfaceRaised: Dark, sleek financial security aesthetic.
+ * - accent / accentLight: Modern cyan/teal primary interaction color.
+ * - green: Indicates safe transactions, verified statuses, and positive income flows.
+ * - amber: Highlights transactions under review, pending challenges, and moderate risks.
+ * - red: Designates blocked transfers, critical threats, and validation errors.
+ */
+
 import { StyleSheet } from "react-native";
 
 export const colors = {

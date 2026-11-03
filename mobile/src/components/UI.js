@@ -1,3 +1,20 @@
+/**
+ * MoMoGuard Reusable UI Component Library
+ * ----------------------------------------
+ * A cohesive design system library built strictly with Vanilla React Native styling.
+ * All components include built-in accessibility roles, labels, and state indicators.
+ *
+ * Components:
+ * - Button: Primary, secondary, and danger touchable buttons with activity spinners.
+ * - Field: Text input with active focus borders, password visibility toggles, and validation error messages.
+ * - Header: Screen section title and eyebrow hierarchy.
+ * - StatusBadge: Semantic color badge for transaction and fraud decisions (SAFE, REVIEW, BLOCKED).
+ * - RiskMeter: Circular/percentage progress visualizer for fraud scoring.
+ * - FormError: Accessible inline error alert banner.
+ * - OfflineBanner: Network disconnect alert with retry and cache indicators.
+ * - Screen: Standardized scrollable screen scaffold with pull-to-refresh integration.
+ */
+
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -201,11 +218,7 @@ export function LoadingState({ message = "Loading securely..." }) {
   );
 }
 
-export function ErrorState({
-  title = "Something went wrong",
-  message,
-  onRetry,
-}) {
+export function ErrorState({ title = "Something went wrong", message, onRetry }) {
   return (
     <View accessibilityRole="alert" style={styles.notice}>
       <Text style={[styles.cardTitle, { color: colors.red }]}>⚠️ {title}</Text>
@@ -229,9 +242,7 @@ export function OfflineBanner({
         <Text style={{ color: colors.amber, fontWeight: "700", fontSize: 13 }}>
           Offline Mode
         </Text>
-        <Text style={[styles.mutedSmall, { color: colors.amber }]}>
-          {message}
-        </Text>
+        <Text style={[styles.mutedSmall, { color: colors.amber }]}>{message}</Text>
       </View>
     </View>
   );
@@ -307,15 +318,13 @@ export function RiskMeter({ score = 0, level = "LOW" }) {
       >
         <Text style={styles.label}>AI Fraud Risk Assessment</Text>
         <Text style={{ color, fontWeight: "800", fontSize: 14 }}>
-          {clamped}% ({level || (clamped >= 70 ? "HIGH" : clamped >= 35 ? "MEDIUM" : "LOW")})
+          {clamped}% (
+          {level || (clamped >= 70 ? "HIGH" : clamped >= 35 ? "MEDIUM" : "LOW")})
         </Text>
       </View>
       <View style={styles.riskMeterTrack}>
         <View
-          style={[
-            styles.riskMeterFill,
-            { width: `${clamped}%`, backgroundColor: color },
-          ]}
+          style={[styles.riskMeterFill, { width: `${clamped}%`, backgroundColor: color }]}
         />
       </View>
     </View>
@@ -324,8 +333,6 @@ export function RiskMeter({ score = 0, level = "LOW" }) {
 
 export function Card({ children, style, raised = false }) {
   return (
-    <View style={[raised ? styles.panelRaised : styles.panel, style]}>
-      {children}
-    </View>
+    <View style={[raised ? styles.panelRaised : styles.panel, style]}>{children}</View>
   );
 }

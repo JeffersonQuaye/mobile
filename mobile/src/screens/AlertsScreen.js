@@ -1,8 +1,17 @@
+/**
+ * MoMoGuard Security Alerts Screen
+ * --------------------------------
+ * Dedicated threat center displaying real-time security warnings:
+ *
+ * Features:
+ * 1. Categorized Threats: High severity, unusual device logins, and suspect recipient transfers.
+ * 2. Instant Incident Resolution: Users can acknowledge and mark resolved threats via `/api/alerts/<id>/resolve`.
+ * 3. Proactive Protection Guidance: Contextual advice explaining why each alert was generated.
+ * 4. Empty State Affirmation: Displays clear "All systems safe" confirmation when no alerts exist.
+ */
+
 import React, { useState } from "react";
-import {
-  Text,
-  View,
-} from "react-native";
+import { Text, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../hooks/useApi";
 import { alertsService } from "../services/api";
@@ -25,16 +34,8 @@ export default function AlertsScreen() {
   const isOnline = useNetworkStatus();
   const [resolvingId, setResolvingId] = useState(null);
 
-  const {
-    data,
-    loading,
-    refreshing,
-    error,
-    isCached,
-    isOffline,
-    retry,
-    refresh,
-  } = useApi("/alerts", token);
+  const { data, loading, refreshing, error, isCached, isOffline, retry, refresh } =
+    useApi("/alerts", token);
 
   async function handleResolve(alertId) {
     setResolvingId(alertId);
@@ -74,11 +75,7 @@ export default function AlertsScreen() {
   const unreadCount = data?.unread || items.filter((a) => a.status !== "RESOLVED").length;
 
   return (
-    <Screen
-      scrollable
-      onRefresh={refresh}
-      refreshing={refreshing}
-    >
+    <Screen scrollable onRefresh={refresh} refreshing={refreshing}>
       {(!isOnline || isOffline) && (
         <OfflineBanner
           message={
@@ -125,12 +122,8 @@ export default function AlertsScreen() {
                 <Text style={styles.mutedSmall}>{formattedDate}</Text>
               </View>
 
-              <Text style={[styles.cardTitle, { fontSize: 17 }]}>
-                {alert.title}
-              </Text>
-              <Text style={[styles.muted, { marginVertical: 6 }]}>
-                {alert.summary}
-              </Text>
+              <Text style={[styles.cardTitle, { fontSize: 17 }]}>{alert.title}</Text>
+              <Text style={[styles.muted, { marginVertical: 6 }]}>{alert.summary}</Text>
 
               <View
                 style={{
@@ -171,7 +164,8 @@ export default function AlertsScreen() {
             <Text style={{ fontSize: 32, marginBottom: 8 }}>🛡️</Text>
             <Text style={styles.cardTitle}>No Active Threats Detected</Text>
             <Text style={[styles.mutedSmall, { textAlign: "center", marginTop: 4 }]}>
-              MoMoGuard AI has not detected any suspicious SIM activity or anomalous transfers.
+              MoMoGuard AI has not detected any suspicious SIM activity or anomalous
+              transfers.
             </Text>
           </View>
         </Card>

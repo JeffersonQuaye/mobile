@@ -1,9 +1,33 @@
+"""
+Integration tests for the MoMoGuard Flask REST API.
+
+Each test in TestApiIntegration makes real HTTP calls through the Flask test
+client (which uses the in-memory database provided by conftest.py when no live
+PostgreSQL is available).  Tests cover the complete HTTP layer end-to-end:
+
+Test Groups:
+    test_health_ready_and_metrics_endpoints  - Liveness, readiness, and metrics probes.
+    test_auth_registration_*                 - Registration validation, duplicate rejection.
+    test_auth_login_*                        - Login success and failure paths.
+    test_auth_refresh_token_rotation_*       - Token rotation and logout revocation.
+    test_dashboard_endpoint                  - Authenticated dashboard summary.
+    test_transaction_creation_and_listing    - CRUD for transactions + fraud assessment.
+    test_fraud_prediction_endpoints          - Standalone /api/fraud/predict endpoint.
+    test_real_fraud_report_submission        - Report creation with validation.
+    test_security_settings_get_and_update    - Security score and toggle settings.
+    test_ai_chat_assistant                   - AI chat response and conversation history.
+    test_device_registration                 - Device CRUD and ownership isolation.
+    test_push_token_registration             - Expo push-token registration endpoint.
+"""
+
 import uuid
 import pytest
 
 
 class TestApiIntegration:
     def test_health_ready_and_metrics_endpoints(self, client):
+        """Verify that all observability endpoints (health, ready, metrics) are
+        reachable and return the expected structure/fields."""
         # Health check
         res = client.get("/api/health")
         assert res.status_code == 200
@@ -28,6 +52,8 @@ class TestApiIntegration:
         assert "uptime_seconds" in metrics_json.get_json()
 
     def test_auth_registration_validation_and_duplicate(self, client):
+        """Registration must reject short/weak passwords (400), succeed with valid
+        data (201), and reject a duplicate email with a 409 Conflict."""
         # Empty / short password
         bad_pw = client.post(
             "/api/auth/register",
@@ -60,6 +86,8 @@ class TestApiIntegration:
         assert dup_res.status_code == 409
 
     def test_auth_login_success_and_failures(self, client):
+        """Login must succeed (200 + token) with correct credentials, and return
+        401 Unauthorized for wrong password or non-existent email."""
         suffix = uuid.uuid4().hex[:6]
         email = f"login_{suffix}@example.com"
         password = "ValidSecretPass123!"
@@ -89,6 +117,9 @@ class TestApiIntegration:
         assert ghost.status_code == 401
 
     def test_auth_refresh_token_rotation_and_revocation(self, client, registered_user):
+        """Refresh tokens must rotate on use (new token returned), the old
+        token must be rejected on re-use (401), and logout must invalidate the
+        current refresh token so further refreshes also fail."""
         refresh_token = registered_user["refresh_token"]
 
         # First refresh succeeds
@@ -110,6 +141,8 @@ class TestApiIntegration:
         assert res3.status_code == 401
 
     def test_dashboard_endpoint(self, client, auth_headers):
+        """Authenticated dashboard must return all expected summary fields.
+        Unauthenticated access is tested implicitly via auth_headers fixture."""
         res = client.get("/api/dashboard", headers=auth_headers)
         assert res.status_code == 200
         data = res.get_json()
@@ -119,6 +152,9 @@ class TestApiIntegration:
         assert "security_score" in data
 
     def test_transaction_creation_and_listing(self, client, auth_headers):
+        """Creating a transaction must return 201 with a fraud assessment,
+        then listing must include the new transaction, and fetching by ID must
+        return the individual record."""
         ref = f"TX-{uuid.uuid4().hex[:8]}"
         tx_payload = {
             "reference": ref,
@@ -151,6 +187,8 @@ class TestApiIntegration:
         assert detail_res.get_json()["id"] == created["transaction"]["id"]
 
     def test_fraud_prediction_endpoints(self, client, auth_headers):
+        """The standalone fraud predict endpoint must return decision, risk_score,
+        and reasons. The model-info endpoint must report the model accuracy."""
         # Predict endpoint
         pred_res = client.post(
             "/api/fraud/predict",
@@ -174,6 +212,8 @@ class TestApiIntegration:
         assert "accuracy" in info_res.get_json()
 
     def test_real_fraud_report_submission(self, client, auth_headers):
+        """Reports with empty descriptions must be rejected (400). A valid
+        report must be created (201) with an ID, category, and created_at."""
         # Missing description
         bad_rep = client.post(
             "/api/reports",
@@ -198,6 +238,8 @@ class TestApiIntegration:
         assert "created_at" in data
 
     def test_security_settings_get_and_update(self, client, auth_headers):
+        """GET /api/security must return a security score and checks dict.
+        PUT must accept toggle flags and reflect them in the response."""
         # Get settings
         get_res = client.get("/api/security", headers=auth_headers)
         assert get_res.status_code == 200
@@ -215,6 +257,9 @@ class TestApiIntegration:
         assert checks["two_factor"] is True
 
     def test_ai_chat_assistant(self, client, auth_headers):
+        """The AI chat endpoint must reply with a message containing relevant
+        PIN/never keywords for a social-engineering query. Conversation history
+        must be retrievable via the /api/ai/conversations endpoint."""
         chat_res = client.post(
             "/api/ai/chat",
             headers=auth_headers,
@@ -231,6 +276,8 @@ class TestApiIntegration:
         assert len(conv_res.get_json()["items"]) >= 1
 
     def test_device_registration(self, client, auth_headers):
+        """Registering a new device must return 201 with the device name.
+        Listing devices must include the newly registered device."""
         reg_res = client.post(
             "/api/devices",
             headers=auth_headers,
@@ -250,6 +297,7 @@ class TestApiIntegration:
         assert len(list_res.get_json()["items"]) >= 1
 
     def test_push_token_registration(self, client, auth_headers):
+        """Registering an Expo push token must return 200 with registered=True."""
         token_res = client.post(
             "/api/notifications/push-token",
             headers=auth_headers,

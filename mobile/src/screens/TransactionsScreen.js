@@ -1,10 +1,17 @@
+/**
+ * MoMoGuard Transactions Screen
+ * ------------------------------
+ * Displays the full mobile money activity ledger with search and category filtering:
+ *
+ * Capabilities:
+ * 1. Categorical Filters: Switch between 'All', 'Income (+)', 'Spending (-)', and 'Flagged / Review'.
+ * 2. Instant Text Search: Filters transactions in real-time by merchant name or recipient phone.
+ * 3. Pull-to-Refresh: Re-queries backend `/api/transactions` endpoint while preserving current filters.
+ * 4. Deep Navigation: Tapping any transaction opens `TransactionDetailScreen` with risk explanations.
+ */
+
 import React, { useState } from "react";
-import {
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../hooks/useApi";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -25,16 +32,8 @@ export default function TransactionsScreen({ navigation }) {
   const [filter, setFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const {
-    data,
-    loading,
-    refreshing,
-    error,
-    isCached,
-    isOffline,
-    retry,
-    refresh,
-  } = useApi("/transactions", token);
+  const { data, loading, refreshing, error, isCached, isOffline, retry, refresh } =
+    useApi("/transactions", token);
 
   const filterTabs = [
     { key: "all", label: "All" },
@@ -56,11 +55,7 @@ export default function TransactionsScreen({ navigation }) {
     return (
       <Screen>
         <Header eyebrow="YOUR ACTIVITY" title="Transactions" />
-        <ErrorState
-          title="Could not load transactions"
-          message={error}
-          onRetry={retry}
-        />
+        <ErrorState title="Could not load transactions" message={error} onRetry={retry} />
       </Screen>
     );
   }
@@ -84,11 +79,7 @@ export default function TransactionsScreen({ navigation }) {
   });
 
   return (
-    <Screen
-      scrollable
-      onRefresh={refresh}
-      refreshing={refreshing}
-    >
+    <Screen scrollable onRefresh={refresh} refreshing={refreshing}>
       {(!isOnline || isOffline) && (
         <OfflineBanner
           message={
